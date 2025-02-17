@@ -65,10 +65,27 @@ fn main() -> std::io::Result<()> {
     output.push("document.latex");
     log::info!("Creating file {:?}", output);
     let mut buf_writer = std::io::BufWriter::new(std::fs::File::create(&output)?);
+
+    writeln!(&mut buf_writer, "\\documentclass{{article}}")?;
+    writeln!(&mut buf_writer, "\\usepackage[T2A]{{fontenc}}")?;
+    writeln!(&mut buf_writer, "\\usepackage[utf8]{{inputenc}}")?;
+    writeln!(&mut buf_writer, "\\usepackage[fontsize=16pt]{{fontsize}}")?;
+    writeln!(&mut buf_writer, "\\usepackage[left=2cm,right=2cm,bottom=2cm]{{geometry}}")?;
+    writeln!(&mut buf_writer, "\\usepackage[english,ukrainian]{{babel}}")?;
+    writeln!(&mut buf_writer, "\\usepackage{{amsmath}}")?;
+    writeln!(&mut buf_writer, "\\usepackage{{amssymb}}")?;
+    writeln!(&mut buf_writer, "\\usepackage{{dsfont}}")?;
+    writeln!(&mut buf_writer, "\\usepackage{{hyperref}}")?;
+
     if media_present {
-        writeln!(&mut buf_writer, "\\usepackage {{ graphicx }}")?;
-        writeln!(&mut buf_writer, "\\graphicspath {{ {{./media/}} }}")?;
+        writeln!(&mut buf_writer, "\\usepackage{{graphicx}}")?;
+        writeln!(&mut buf_writer, "\\graphicspath{{ {{./media/}} }}")?;
     }
+
+    writeln!(&mut buf_writer)?;
+    writeln!(&mut buf_writer, "\\begin{{document}}")?;
+    writeln!(&mut buf_writer)?;
+
 
     input.push("_rels");
     input.push("document.xml.rels");
@@ -87,6 +104,8 @@ fn main() -> std::io::Result<()> {
 
     let mut prysm = Prysm::new(rels);
     prysm.document(&mut parser, &mut buf_writer)?;
+
+    writeln!(&mut buf_writer, "\\end{{document}}")?;
 
     log::info!("Exiting 'main'");
 

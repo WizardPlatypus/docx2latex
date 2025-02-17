@@ -20,7 +20,7 @@ pub enum Link {
 enum State {
     None,
     NaryPr,
-    Chr
+    Chr,
 }
 
 #[derive(Debug)]
@@ -107,7 +107,7 @@ impl Prysm {
         Prysm {
             stack: vec![],
             rels,
-            fa: State::None
+            fa: State::None,
         }
     }
 
@@ -134,18 +134,20 @@ impl Prysm {
                             if let Some(rel_id) =
                                 attributes.iter().find(|&a| normalize(&a.name) == "r:embed")
                             {
-                                Tag::ABlip { rel: rel_id.value.clone() }
+                                Tag::ABlip {
+                                    rel: rel_id.value.clone(),
+                                }
                             } else {
                                 log::error!("\"a:blip\" #{blip} is missing atrribute \"r:embed\"");
                                 break;
                             }
-                        },
+                        }
                         "pic:pic" => Tag::PicPic,
                         "pic:blipFill" => Tag::PicBlipFill,
                         "m:oMathPara" => {
                             write!(buf_writer, "$$")?;
                             Tag::MoMathPara
-                        },
+                        }
                         "m:oMath" => Tag::MoMath,
                         "m:d" => {
                             write!(buf_writer, "(")?;
@@ -153,19 +155,19 @@ impl Prysm {
                         }
                         "m:r" => Tag::MRun,
                         "m:t" => Tag::MText,
-                        "m:sub" => { 
+                        "m:sub" => {
                             write!(buf_writer, "_{{")?;
                             Tag::MSub
-                        },
+                        }
                         "m:sup" => {
                             write!(buf_writer, "^{{")?;
                             Tag::MSup
-                        },
+                        }
                         "m:nary" => Tag::MNary,
                         "m:naryPr" => {
                             self.fa = State::NaryPr;
                             Tag::MNaryPr
-                        },
+                        }
                         "m:chr" => {
                             if let State::NaryPr = &self.fa {
                                 self.fa = State::Chr;
@@ -173,38 +175,44 @@ impl Prysm {
                             if let Some(symbol) =
                                 attributes.iter().find(|&a| normalize(&a.name) == "m:val")
                             {
-                                write!(buf_writer, "\\{}", match symbol.value.as_str() {
-                                    "⋀" => "bigwedge",
-                                    "⋁" => "bigvee",
-                                    "⋂" => "bigcap",
-                                    "⋃" => "bigcup",
-                                    "∐" => "coprod",
-                                    "∏" => "prod",
-                                    "∑" => "sum",
-                                    "∮" => "oint",
-                                    _ => ""
-                                })?;
+                                write!(
+                                    buf_writer,
+                                    "\\{}",
+                                    match symbol.value.as_str() {
+                                        "⋀" => "bigwedge",
+                                        "⋁" => "bigvee",
+                                        "⋂" => "bigcap",
+                                        "⋃" => "bigcup",
+                                        "∐" => "coprod",
+                                        "∏" => "prod",
+                                        "∑" => "sum",
+                                        "∮" => "oint",
+                                        _ => "",
+                                    }
+                                )?;
 
-                                Tag::MChr { value: symbol.value.clone() }
+                                Tag::MChr {
+                                    value: symbol.value.clone(),
+                                }
                             } else {
                                 log::error!("\"m:chr\" #{blip} is missing atrribute \"m:val\"");
                                 break;
                             }
-                        },
+                        }
                         "m:f" => {
                             write!(buf_writer, "\\frac")?;
                             Tag::MFraction
-                        },
+                        }
                         "m:func" => Tag::MFunc,
                         "m:fName" => Tag::MFName,
                         "m:num" => {
                             write!(buf_writer, "{{")?;
                             Tag::MNum
-                        },
+                        }
                         "m:den" => {
                             write!(buf_writer, "{{")?;
                             Tag::MDen
-                        },
+                        }
                         "wp:inline" => Tag::WPInline,
                         "wp:anchor" => Tag::WPAnchor,
                         "w:p" => Tag::WParagraph,
@@ -327,7 +335,7 @@ impl Prysm {
                                             let path = std::path::PathBuf::from(path);
                                             write!(
                                                 buf_writer,
-                                                "\\includegraphics {{ {:?} }}",
+                                                "\\includegraphics[width=\\textwidth]{{{:?}}}",
                                                 path.file_stem()
                                                     .expect("Rels did not point to an image file")
                                             )?;
@@ -352,12 +360,12 @@ impl Prysm {
                                 Link::Anchor(anchor) => {
                                     write!(
                                         buf_writer,
-                                        "\\hyperlink {{ {anchor} }} {{ {content} }}"
+                                        "\\hyperlink{{{anchor}}}{{{content}}}"
                                     )?;
                                 }
                                 Link::Relationship(rel_id) => {
                                     if let Some(url) = self.rels.get(rel_id) {
-                                        write!(buf_writer, "\\href {{ {url} }} {{ {content} }}")?;
+                                        write!(buf_writer, "\\href{{{url}}}{{{content}}}")?;
                                     } else {
                                         log::error!(
                                             "Hyperlink relies on a missing relationship {rel_id:?}"
@@ -392,7 +400,7 @@ impl Prysm {
                 writeln!(buf_writer)?;
                 writeln!(buf_writer)?;
             } else if let Tag::WBookmarkStart { anchor: name } = &self.stack[n - 1] {
-                write!(buf_writer, "\\hypertarget {{ {name} }} {{")?;
+                write!(buf_writer, "\\hypertarget{{{name}}}{{")?;
             } else if let Tag::WBookmarkEnd = &self.stack[n - 1] {
                 write!(buf_writer, "}}")?;
             } else if let Tag::MDelim = &self.stack[n - 1] {
