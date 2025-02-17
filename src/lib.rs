@@ -1,11 +1,10 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, io::Write};
 
 use xml::{
     name::OwnedName,
     reader::{EventReader, XmlEvent},
 };
 
-#[derive(Default)]
 pub struct Prysm {
     stack: Vec<Word>,
     rels: HashMap<String, String>,
@@ -81,7 +80,11 @@ impl Prysm {
         }
     }
 
-    pub fn document(&mut self, parser: &mut EventReader<std::io::BufReader<std::fs::File>>) {
+    pub fn document(
+        &mut self,
+        parser: &mut EventReader<std::io::BufReader<std::fs::File>>,
+        buf_writer: &mut std::io::BufWriter<std::fs::File>,
+    ) -> std::io::Result<()> {
         let mut bookmark_start = 0;
         let mut hyperlink = 0;
         loop {
@@ -122,7 +125,9 @@ impl Prysm {
                                 }
                             } else {
                                 log::warn!("Tag \"w:bookmarkStart\" #{bookmark_start} is missing attribute \"w:anchor\"");
-                                Word::BookmarkStart { anchor: "".to_string() }
+                                Word::BookmarkStart {
+                                    anchor: "".to_string(),
+                                }
                             }
                         }
                         "w:bookmarkEnd" => Word::BookmarkEnd,
@@ -136,13 +141,13 @@ impl Prysm {
                 Ok(XmlEvent::EndElement { name }) => {
                     let id = normalize(&name);
                     log::debug!("EndElement '{id}'",);
-                    self.process();
+                    self.process(buf_writer)?;
                     self.stack.pop();
                 }
                 Ok(XmlEvent::Characters(content)) => {
                     log::debug!("Characters {:?}", &content);
                     self.stack.push(Word::Content(content));
-                    self.process();
+                    self.process(buf_writer)?;
                     self.stack.pop();
                 }
                 Ok(XmlEvent::StartDocument { version, .. }) => {
@@ -163,9 +168,13 @@ impl Prysm {
                 }
             }
         }
+        Ok(())
     }
 
-    pub fn process(&self) {
+    pub fn process(
+        &mut self,
+        buf_writer: &mut std::io::BufWriter<std::fs::File>,
+    ) -> std::io::Result<()> {
         // ["w:p", "w:hyperlink", "w:r", "w:t", "text"] -> hyperlink(text)
         // ["w:p", "w:r", "w:t", "text"] -> text
         // ["w:p"] -> newline
@@ -181,18 +190,24 @@ impl Prysm {
                             if let Word::Paragraph = &self.stack[n - 5] {
                                 match link {
                                     Link::Anchor(anchor) => {
-                                        print!("\\hyperlink {{ {anchor} }} {{ {content} }}")
+                                        write!(
+                                            buf_writer,
+                                            "\\hyperlink {{ {anchor} }} {{ {content} }}"
+                                        )?;
                                     }
                                     Link::Relationship(rel_id) => {
                                         if let Some(url) = self.rels.get(rel_id) {
-                                            print!("\\href {{ {url} }} {{ {content} }}");
+                                            write!(
+                                                buf_writer,
+                                                "\\href {{ {url} }} {{ {content} }}"
+                                            )?;
                                         } else {
                                             log::error!("Hyperlink relies on a missing relationship {rel_id:?}");
-                                            print!("{content}");
+                                            write!(buf_writer, "{content}")?;
                                         }
                                     }
                                 }
-                                return;
+                                return Ok(());
                             }
                         }
                     }
@@ -204,8 +219,8 @@ impl Prysm {
                 if let Word::Text = &self.stack[n - 2] {
                     if let Word::Run = &self.stack[n - 3] {
                         if let Word::Paragraph = &self.stack[n - 4] {
-                            print!("{}", content);
-                            return;
+                            write!(buf_writer, "{}", content)?;
+                            return Ok(());
                         }
                     }
                 }
@@ -213,14 +228,15 @@ impl Prysm {
         }
         if n > 0 {
             if let Word::Paragraph = &self.stack[n - 1] {
-                println!();
-                println!();
+                writeln!(buf_writer)?;
+                writeln!(buf_writer)?;
             } else if let Word::BookmarkStart { anchor: name } = &self.stack[n - 1] {
-                print!("\\hypertarget {{ {name} }} {{")
+                write!(buf_writer, "\\hypertarget {{ {name} }} {{")?;
             } else if let Word::BookmarkEnd = &self.stack[n - 1] {
-                print!("}}")
+                write!(buf_writer, "}}")?;
             }
         }
+        Ok(())
     }
 }
 
