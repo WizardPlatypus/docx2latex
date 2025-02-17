@@ -33,6 +33,8 @@ pub enum Tag {
     MoMathPara,
     MoMath,
     MDelim,
+    MRad,
+    MDeg,
     MRun,
     MText,
     MSub,
@@ -152,7 +154,15 @@ impl Prysm {
                         "m:d" => {
                             write!(buf_writer, "(")?;
                             Tag::MDelim
-                        }
+                        },
+                        "m:rad" => {
+                            write!(buf_writer, "\\sqrt");
+                            Tag::MRad
+                        },
+                        "m:deg" => {
+                            write!(buf_writer, "[");
+                            Tag::MDeg
+                        },
                         "m:r" => Tag::MRun,
                         "m:t" => Tag::MText,
                         "m:sub" => {
@@ -313,6 +323,8 @@ impl Prysm {
         // ["m:d"] -> )
         // [("m:sub"/"m:sup"/"m:num"/"m:den")] -> }
         // ["m:oMathPara"] -> $$
+        // ["m:deg"] -> ]{
+        // ["m:rad"] -> }
         log::debug!("Stack: {:?}", &self.stack);
         let n = self.stack.len();
         if n > 6 {
@@ -414,7 +426,11 @@ impl Prysm {
             } else if let Tag::MDen = &self.stack[n - 1] {
                 write!(buf_writer, "}}")?;
             } else if let Tag::MoMathPara = &self.stack[n - 1] {
-                write!(buf_writer, "$$")?;
+                writeln!(buf_writer, "$$")?;
+            } else if let Tag::MDeg = &self.stack[n - 1] {
+                write!(buf_writer, "]{{")?;
+            } else if let Tag::MRad = &self.stack[n - 1] {
+                write!(buf_writer, "}}")?;
             }
         }
         Ok(())
