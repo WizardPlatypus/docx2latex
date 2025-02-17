@@ -8,12 +8,19 @@ use xml::{
 pub struct Prysm {
     stack: Vec<Tag>,
     rels: HashMap<String, String>,
+    fa: State,
 }
 
 #[derive(Debug)]
 pub enum Link {
     Anchor(String),
     Relationship(String),
+}
+
+enum State {
+    None,
+    NaryPr,
+    Chr
 }
 
 #[derive(Debug)]
@@ -23,6 +30,21 @@ pub enum Tag {
     ABlip { rel: String },
     PicPic,
     PicBlipFill,
+    MoMathPara,
+    MoMath,
+    MDelim,
+    MRun,
+    MText,
+    MSub,
+    MSup,
+    MNary,
+    MNaryPr,
+    MChr { value: String },
+    MFraction,
+    MFunc,
+    MFName,
+    MNum,
+    MDen,
     WPInline,
     WPAnchor,
     WBookmarkStart { anchor: String },
@@ -85,6 +107,7 @@ impl Prysm {
         Prysm {
             stack: vec![],
             rels,
+            fa: State::None
         }
     }
 
@@ -119,6 +142,69 @@ impl Prysm {
                         },
                         "pic:pic" => Tag::PicPic,
                         "pic:blipFill" => Tag::PicBlipFill,
+                        "m:oMathPara" => {
+                            write!(buf_writer, "$$")?;
+                            Tag::MoMathPara
+                        },
+                        "m:oMath" => Tag::MoMath,
+                        "m:d" => {
+                            write!(buf_writer, "(")?;
+                            Tag::MDelim
+                        }
+                        "m:r" => Tag::MRun,
+                        "m:t" => Tag::MText,
+                        "m:sub" => { 
+                            write!(buf_writer, "_{{")?;
+                            Tag::MSub
+                        },
+                        "m:sup" => {
+                            write!(buf_writer, "^{{")?;
+                            Tag::MSup
+                        },
+                        "m:nary" => Tag::MNary,
+                        "m:naryPr" => {
+                            self.fa = State::NaryPr;
+                            Tag::MNaryPr
+                        },
+                        "m:chr" => {
+                            if let State::NaryPr = &self.fa {
+                                self.fa = State::Chr;
+                            }
+                            if let Some(symbol) =
+                                attributes.iter().find(|&a| normalize(&a.name) == "m:val")
+                            {
+                                write!(buf_writer, "\\{}", match symbol.value.as_str() {
+                                    "⋀" => "bigwedge",
+                                    "⋁" => "bigvee",
+                                    "⋂" => "bigcap",
+                                    "⋃" => "bigcup",
+                                    "∐" => "coprod",
+                                    "∏" => "prod",
+                                    "∑" => "sum",
+                                    "∮" => "oint",
+                                    _ => ""
+                                })?;
+
+                                Tag::MChr { value: symbol.value.clone() }
+                            } else {
+                                log::error!("\"m:chr\" #{blip} is missing atrribute \"m:val\"");
+                                break;
+                            }
+                        },
+                        "m:f" => {
+                            write!(buf_writer, "\\frac")?;
+                            Tag::MFraction
+                        },
+                        "m:func" => Tag::MFunc,
+                        "m:fName" => Tag::MFName,
+                        "m:num" => {
+                            write!(buf_writer, "{{")?;
+                            Tag::MNum
+                        },
+                        "m:den" => {
+                            write!(buf_writer, "{{")?;
+                            Tag::MDen
+                        },
                         "wp:inline" => Tag::WPInline,
                         "wp:anchor" => Tag::WPAnchor,
                         "w:p" => Tag::WParagraph,
@@ -170,7 +256,13 @@ impl Prysm {
                     let id = normalize(&name);
                     log::debug!("EndElement '{id}'",);
                     self.process(buf_writer)?;
-                    self.stack.pop();
+                    if let Some(Tag::MNaryPr) = self.stack.pop() {
+                        if let State::NaryPr = &self.fa {
+                            // m:naryPr with no m:chr within are treated as integrals
+                            write!(buf_writer, "\\int")?;
+                        }
+                        self.fa = State::None;
+                    }
                 }
                 Ok(XmlEvent::Characters(content)) => {
                     log::debug!("Characters {:?}", &content);
@@ -210,6 +302,9 @@ impl Prysm {
         // ["w:p"] -> newline
         // ["w:bookmarkStart"] -> \hypertarget{anchor}{
         // ["w:bookmarkEnd"] -> }
+        // ["m:d"] -> )
+        // [("m:sub"/"m:sup"/"m:num"/"m:den")] -> }
+        // ["m:oMathPara"] -> $$
         log::debug!("Stack: {:?}", &self.stack);
         let n = self.stack.len();
         if n > 6 {
@@ -284,6 +379,11 @@ impl Prysm {
                         write!(buf_writer, "{}", content)?;
                         return Ok(());
                     }
+                } else if let Tag::MText = &self.stack[n - 2] {
+                    if let Tag::MRun = &self.stack[n - 3] {
+                        write!(buf_writer, "{}", content)?;
+                        return Ok(());
+                    }
                 }
             }
         }
@@ -295,6 +395,18 @@ impl Prysm {
                 write!(buf_writer, "\\hypertarget {{ {name} }} {{")?;
             } else if let Tag::WBookmarkEnd = &self.stack[n - 1] {
                 write!(buf_writer, "}}")?;
+            } else if let Tag::MDelim = &self.stack[n - 1] {
+                write!(buf_writer, ")")?;
+            } else if let Tag::MSub = &self.stack[n - 1] {
+                write!(buf_writer, "}}")?;
+            } else if let Tag::MSup = &self.stack[n - 1] {
+                write!(buf_writer, "}}")?;
+            } else if let Tag::MNum = &self.stack[n - 1] {
+                write!(buf_writer, "}}")?;
+            } else if let Tag::MDen = &self.stack[n - 1] {
+                write!(buf_writer, "}}")?;
+            } else if let Tag::MoMathPara = &self.stack[n - 1] {
+                write!(buf_writer, "$$")?;
             }
         }
         Ok(())
