@@ -6,7 +6,7 @@ use xml::{
 };
 
 pub struct Prysm {
-    stack: Vec<Word>,
+    stack: Vec<Tag>,
     rels: HashMap<String, String>,
 }
 
@@ -17,14 +17,22 @@ pub enum Link {
 }
 
 #[derive(Debug)]
-pub enum Word {
-    BookmarkStart { anchor: String },
-    BookmarkEnd,
-    Document,
-    Paragraph,
-    Run,
-    Text,
-    Hyperlink(Link),
+pub enum Tag {
+    AGraphic,
+    AGraphicData,
+    ABlip { rel: String },
+    PicPic,
+    PicBlipFill,
+    WPInline,
+    WPAnchor,
+    WBookmarkStart { anchor: String },
+    WBookmarkEnd,
+    WDocument,
+    WDrawing,
+    WParagraph,
+    WRun,
+    WText,
+    WHyperlink(Link),
     Content(String),
     Unknown { id: String },
 }
@@ -87,6 +95,7 @@ impl Prysm {
     ) -> std::io::Result<()> {
         let mut bookmark_start = 0;
         let mut hyperlink = 0;
+        let mut blip = 0;
         loop {
             match parser.next() {
                 Ok(XmlEvent::StartElement {
@@ -95,20 +104,37 @@ impl Prysm {
                     let tag = normalize(&name);
                     log::debug!("StartElement '{tag}'",);
                     let element = match tag.as_str() {
-                        "w:p" => Word::Paragraph,
-                        "w:r" => Word::Run,
-                        "w:t" => Word::Text,
+                        "a:graphic" => Tag::AGraphic,
+                        "a:graphicData" => Tag::AGraphicData,
+                        "a:blip" => {
+                            blip += 1;
+                            if let Some(rel_id) =
+                                attributes.iter().find(|&a| normalize(&a.name) == "r:embed")
+                            {
+                                Tag::ABlip { rel: rel_id.value.clone() }
+                            } else {
+                                log::error!("\"a:blip\" #{blip} is missing atrribute \"r:embed\"");
+                                break;
+                            }
+                        },
+                        "pic:pic" => Tag::PicPic,
+                        "pic:blipFill" => Tag::PicBlipFill,
+                        "wp:inline" => Tag::WPInline,
+                        "wp:anchor" => Tag::WPAnchor,
+                        "w:p" => Tag::WParagraph,
+                        "w:r" => Tag::WRun,
+                        "w:t" => Tag::WText,
                         "w:hyperlink" => {
                             hyperlink += 1;
                             if let Some(rel_id) =
                                 attributes.iter().find(|&a| normalize(&a.name) == "r:id")
                             {
-                                Word::Hyperlink(Link::Relationship(rel_id.value.clone()))
+                                Tag::WHyperlink(Link::Relationship(rel_id.value.clone()))
                             } else if let Some(anchor) = attributes
                                 .iter()
                                 .find(|&a| normalize(&a.name) == "w:anchor")
                             {
-                                Word::Hyperlink(Link::Anchor(anchor.value.clone()))
+                                Tag::WHyperlink(Link::Anchor(anchor.value.clone()))
                             } else {
                                 log::error!("\"w:hyperlink\" #{hyperlink} is missing both \"r:Id\" and \"w:anchor\"");
                                 break;
@@ -120,20 +146,22 @@ impl Prysm {
                                 .iter()
                                 .find(|&a| normalize(&a.name) == "w:anchor")
                             {
-                                Word::BookmarkStart {
+                                Tag::WBookmarkStart {
                                     anchor: anchor.value.clone(),
                                 }
                             } else {
                                 log::warn!("Tag \"w:bookmarkStart\" #{bookmark_start} is missing attribute \"w:anchor\"");
-                                Word::BookmarkStart {
+                                Tag::WBookmarkStart {
                                     anchor: "".to_string(),
                                 }
                             }
                         }
-                        "w:bookmarkEnd" => Word::BookmarkEnd,
+                        "w:bookmarkEnd" => Tag::WBookmarkEnd,
+                        "w:document" => Tag::WDocument,
+                        "w:drawing" => Tag::WDrawing,
                         _ => {
-                            log::warn!("Unknown");
-                            Word::Unknown { id: tag }
+                            log::warn!("Ignored: {tag:?}");
+                            Tag::Unknown { id: tag }
                         }
                     };
                     self.stack.push(element);
@@ -146,19 +174,20 @@ impl Prysm {
                 }
                 Ok(XmlEvent::Characters(content)) => {
                     log::debug!("Characters {:?}", &content);
-                    self.stack.push(Word::Content(content));
+                    self.stack.push(Tag::Content(content));
                     self.process(buf_writer)?;
                     self.stack.pop();
                 }
                 Ok(XmlEvent::StartDocument { version, .. }) => {
                     log::debug!("StartDocument {version}");
-                    self.stack.push(Word::Document);
+                    self.stack.push(Tag::WDocument);
                 }
                 Ok(XmlEvent::EndDocument) => {
                     log::debug!("EndDocument");
                     self.stack.pop();
                     break;
                 }
+                Ok(XmlEvent::Whitespace(_)) => continue,
                 Ok(event) => {
                     log::warn!("Unmatched Event: {event:?}");
                 }
@@ -175,39 +204,44 @@ impl Prysm {
         &mut self,
         buf_writer: &mut std::io::BufWriter<std::fs::File>,
     ) -> std::io::Result<()> {
-        // ["w:p", "w:hyperlink", "w:r", "w:t", "text"] -> hyperlink(text)
-        // ["w:p", "w:r", "w:t", "text"] -> text
+        // ["w:drawing", ("wp:inline"/"wp:anchor"), "a:graphic", "a:graphicData", "pic:pic", "pic:blipFill", "a:blip"]
+        // ["w:hyperlink", "w:r", "w:t", "text"] -> hyperlink(text)
+        // ["w:r", "w:t", "text"] -> text
         // ["w:p"] -> newline
         // ["w:bookmarkStart"] -> \hypertarget{anchor}{
         // ["w:bookmarkEnd"] -> }
         log::debug!("Stack: {:?}", &self.stack);
         let n = self.stack.len();
-        if n > 4 {
-            if let Word::Content(content) = &self.stack[n - 1] {
-                if let Word::Text = &self.stack[n - 2] {
-                    if let Word::Run = &self.stack[n - 3] {
-                        if let Word::Hyperlink(link) = &self.stack[n - 4] {
-                            if let Word::Paragraph = &self.stack[n - 5] {
-                                match link {
-                                    Link::Anchor(anchor) => {
-                                        write!(
-                                            buf_writer,
-                                            "\\hyperlink {{ {anchor} }} {{ {content} }}"
-                                        )?;
-                                    }
-                                    Link::Relationship(rel_id) => {
-                                        if let Some(url) = self.rels.get(rel_id) {
+        if n > 6 {
+            if let Tag::ABlip { rel } = &self.stack[n - 1] {
+                if let Tag::PicBlipFill = &self.stack[n - 2] {
+                    if let Tag::PicPic = &self.stack[n - 3] {
+                        if let Tag::AGraphicData = &self.stack[n - 4] {
+                            if let Tag::AGraphic = &self.stack[n - 5] {
+                                let switch;
+                                if let Tag::WPInline = &self.stack[n - 6] {
+                                    switch = true;
+                                } else if let Tag::WPAnchor = &self.stack[n - 6] {
+                                    switch = true;
+                                } else {
+                                    switch = false;
+                                }
+                                if switch {
+                                    if let Tag::WDrawing = &self.stack[n - 7] {
+                                        if let Some(path) = self.rels.get(rel) {
+                                            let path = std::path::PathBuf::from(path);
                                             write!(
                                                 buf_writer,
-                                                "\\href {{ {url} }} {{ {content} }}"
+                                                "\\includegraphics {{ {:?} }}",
+                                                path.file_stem()
+                                                    .expect("Rels did not point to an image file")
                                             )?;
                                         } else {
-                                            log::error!("Hyperlink relies on a missing relationship {rel_id:?}");
-                                            write!(buf_writer, "{content}")?;
+                                            log::error!("\"a:blip\" relies on a relationship that does not exist: {:?}", rel);
                                         }
+                                        return Ok(());
                                     }
                                 }
-                                return Ok(());
                             }
                         }
                     }
@@ -215,24 +249,51 @@ impl Prysm {
             }
         }
         if n > 3 {
-            if let Word::Content(content) = &self.stack[n - 1] {
-                if let Word::Text = &self.stack[n - 2] {
-                    if let Word::Run = &self.stack[n - 3] {
-                        if let Word::Paragraph = &self.stack[n - 4] {
-                            write!(buf_writer, "{}", content)?;
+            if let Tag::Content(content) = &self.stack[n - 1] {
+                if let Tag::WText = &self.stack[n - 2] {
+                    if let Tag::WRun = &self.stack[n - 3] {
+                        if let Tag::WHyperlink(link) = &self.stack[n - 4] {
+                            match link {
+                                Link::Anchor(anchor) => {
+                                    write!(
+                                        buf_writer,
+                                        "\\hyperlink {{ {anchor} }} {{ {content} }}"
+                                    )?;
+                                }
+                                Link::Relationship(rel_id) => {
+                                    if let Some(url) = self.rels.get(rel_id) {
+                                        write!(buf_writer, "\\href {{ {url} }} {{ {content} }}")?;
+                                    } else {
+                                        log::error!(
+                                            "Hyperlink relies on a missing relationship {rel_id:?}"
+                                        );
+                                        write!(buf_writer, "{content}")?;
+                                    }
+                                }
+                            }
                             return Ok(());
                         }
                     }
                 }
             }
         }
+        if n > 2 {
+            if let Tag::Content(content) = &self.stack[n - 1] {
+                if let Tag::WText = &self.stack[n - 2] {
+                    if let Tag::WRun = &self.stack[n - 3] {
+                        write!(buf_writer, "{}", content)?;
+                        return Ok(());
+                    }
+                }
+            }
+        }
         if n > 0 {
-            if let Word::Paragraph = &self.stack[n - 1] {
+            if let Tag::WParagraph = &self.stack[n - 1] {
                 writeln!(buf_writer)?;
                 writeln!(buf_writer)?;
-            } else if let Word::BookmarkStart { anchor: name } = &self.stack[n - 1] {
+            } else if let Tag::WBookmarkStart { anchor: name } = &self.stack[n - 1] {
                 write!(buf_writer, "\\hypertarget {{ {name} }} {{")?;
-            } else if let Word::BookmarkEnd = &self.stack[n - 1] {
+            } else if let Tag::WBookmarkEnd = &self.stack[n - 1] {
                 write!(buf_writer, "}}")?;
             }
         }

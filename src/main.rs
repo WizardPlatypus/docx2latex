@@ -1,6 +1,6 @@
 use clap::Parser;
 use docx2latex::*;
-use std::path::PathBuf;
+use std::{io::Write, path::PathBuf};
 
 use xml::reader::EventReader;
 
@@ -14,7 +14,7 @@ struct Args {
     input: PathBuf,
     /// Output directory, where the resulting latex and media files will be placed.
     #[arg(short, long)]
-    output: PathBuf
+    output: PathBuf,
 }
 
 fn main() -> std::io::Result<()> {
@@ -32,12 +32,44 @@ fn main() -> std::io::Result<()> {
         std::fs::create_dir(&output)?;
     }
 
+    let mut input = args.input;
+
+    input.push("word");
+    input.push("media");
+    let media_present;
+    if input.exists() {
+        log::info!("Found a media folder at {:?}", &input);
+        media_present = true;
+        output.push("media");
+        if !output.exists() {
+            log::info!("Creating directory {:?}", output);
+            std::fs::create_dir(&output)?;
+        }
+        for entry in std::fs::read_dir(&input)? {
+            if let Ok(file) = &entry {
+                output.push(file.file_name());
+                std::fs::copy(file.path(), &output)?;
+                log::info!("Copied media file {:?}", file.file_name());
+                output.pop();
+            } else {
+                log::error!("DirEntry Error: {:?}", &entry);
+            }
+        }
+        output.pop();
+    } else {
+        log::info!("Did not find media folder at {:?}", &input);
+        media_present = false;
+    }
+    input.pop();
+
     output.push("document.latex");
     log::info!("Creating file {:?}", output);
     let mut buf_writer = std::io::BufWriter::new(std::fs::File::create(&output)?);
+    if media_present {
+        writeln!(&mut buf_writer, "\\usepackage {{ graphicx }}")?;
+        writeln!(&mut buf_writer, "\\graphicspath {{ {{./media/}} }}")?;
+    }
 
-    let mut input = args.input;
-    input.push("word");
     input.push("_rels");
     input.push("document.xml.rels");
 
