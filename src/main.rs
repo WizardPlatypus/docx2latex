@@ -1,15 +1,16 @@
+use std::path::PathBuf;
 use clap::Parser;
 
-/// Example from the doc
+/// A command line utility to convert docx files into latex templates.
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
-    /// A name
+    /// Input docx file to be processed.
     #[arg(short, long)]
-    name: String,
-    /// A count
-    #[arg(short, long, default_value_t = 1)]
-    count: u8
+    input: PathBuf,
+    /// Output directory, where the resulting latex and media files will be placed.
+    #[arg(short, long)]
+    output: PathBuf
 }
 
 fn main() {
@@ -17,8 +18,9 @@ fn main() {
 
     log::info!("Entered 'main'");
     let args = Args::parse();
-    for _ in 0..args.count {
-        println!("Hello {}", args.name);
-    }
+
+    println!("{:?}", args.input);
+    println!("{:?}", args.output);
+
     log::info!("Exiting 'main'");
 }
