@@ -13,8 +13,12 @@ struct Args {
 }
 
 fn main() {
+    pretty_env_logger::init();
+
+    log::info!("Entered 'main'");
     let args = Args::parse();
     for _ in 0..args.count {
         println!("Hello {}", args.name);
     }
+    log::info!("Exiting 'main'");
 }
