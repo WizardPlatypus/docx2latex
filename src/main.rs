@@ -1,10 +1,8 @@
 use clap::Parser;
-use docx2latex::Element;
-use std::fs;
-use std::io;
+use docx2latex::*;
 use std::path::PathBuf;
 
-use xml::reader::{EventReader, XmlEvent};
+use xml::reader::EventReader;
 
 /// A command line utility to convert docx files into latex templates.
 #[derive(Parser, Debug)]
@@ -35,7 +33,12 @@ fn main() -> std::io::Result<()> {
 
     log::debug!("Reading {:?}", &input);
 
-    let _root = Element::read(&input)?;
+    // let _root = Element::read(&input)?;
+
+    let mut prysm = Prysm::default();
+    let mut parser = EventReader::new(std::io::BufReader::new(std::fs::File::open(&input)?));
+
+    prysm.stream(&mut parser);
 
     log::info!("Exiting 'main'");
 
