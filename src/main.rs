@@ -27,18 +27,24 @@ fn main() -> std::io::Result<()> {
     // log::debug!("Output directory is {:?}", args.output);
 
     let mut input = args.input;
-
     input.push("word");
+    input.push("_rels");
+    input.push("document.xml.rels");
+
+    log::debug!("Reading {:?}", &input);
+    let mut parser = EventReader::new(std::io::BufReader::new(std::fs::File::open(&input)?));
+    let rels = docx2latex::relationships(&mut parser)
+        .map_err(|_| std::io::Error::from(std::io::ErrorKind::InvalidData))?;
+
+    let mut prysm = Prysm::new(rels);
+
+    input.pop();
+    input.pop();
     input.push("document.xml");
 
     log::debug!("Reading {:?}", &input);
-
-    // let _root = Element::read(&input)?;
-
-    let mut prysm = Prysm::default();
     let mut parser = EventReader::new(std::io::BufReader::new(std::fs::File::open(&input)?));
-
-    prysm.stream(&mut parser);
+    prysm.document(&mut parser);
 
     log::info!("Exiting 'main'");
 
