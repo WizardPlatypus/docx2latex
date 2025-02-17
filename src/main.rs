@@ -1,7 +1,10 @@
-use std::path::PathBuf;
 use clap::Parser;
+use docx2latex::Element;
 use std::fs;
 use std::io;
+use std::path::PathBuf;
+
+use xml::reader::{EventReader, XmlEvent};
 
 /// A command line utility to convert docx files into latex templates.
 #[derive(Parser, Debug)]
@@ -32,7 +35,7 @@ fn main() -> std::io::Result<()> {
 
     log::debug!("Reading {:?}", &input);
 
-    let _document = fs::File::open(&input)?;
+    let _root = Element::read(&input)?;
 
     log::info!("Exiting 'main'");
 
