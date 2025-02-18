@@ -31,7 +31,7 @@ There's a group of files in this repository that you may use for testing.
 - `example.zip` was obtained via renaming `example.docx`, as in `cp example.docx example.zip`
 - The folder `example` is the OOXML package extracted from `example.zip`
 
-You may run the program using the following command (assuming you have [Cargo]{https://doc.rust-lang.org/cargo/getting-started/installation.html} installed):
+You may run the program using the following command (assuming you have [Cargo](https://doc.rust-lang.org/cargo/getting-started/installation.html) installed):
 
 ```
 RUST_LOG=error cargo run -- --input example --output output
@@ -160,18 +160,18 @@ Setting `RUST_LOG` to #4 "Debug", will issue messages of levels 1 through 4, etc
 
 # My thanks to
 
-[Office Open XML]{http://officeopenxml.com/} is a wonderful website that explains how most things in OOXML packages work.
+[Office Open XML](http://officeopenxml.com/) is a wonderful website that explains how most things in OOXML packages work.
 It has been instrumental in understanding document structure and design requirments of certain tags.
 
-[Datypic XML vocabulary]{https://www.datypic.com/sc/ooxml/} lists every tag used in OOXML packages.
+[Datypic XML vocabulary](https://www.datypic.com/sc/ooxml/) lists every tag used in OOXML packages.
 While the website lacks any textual description of the tags it lists, it is easy to navigate and provides great insight into technical properties of tags, such as their expected sequencing and acceptable data types.
 
-[Overleaf]{https://www.overleaf.com} is an online platform that allows to work with LATEX files from the browser.
+[Overleaf](https://www.overleaf.com) is an online platform that allows to work with LATEX files from the browser.
 The infrastructure required to run LATEX on a home PC takes a lot of time and memory space to setup, so having pretty much all LATEX functionality you may need accessible from the browser is absolutely wonderful.
 Overleaf team have also relased many tutorials about using LATEX, within their toolset and otherwise.
 
-[Rust XML]{https://crates.io/crates/xml} — a Rust crate for parsing XML in streaming fashion.
+[Rust XML](https://crates.io/crates/xml) — a Rust crate for parsing XML in streaming fashion.
 
-[Clap]{https://crates.io/crates/clap} - a Rust crate for creating CLIs.
+[Clap](https://crates.io/crates/clap) - a Rust crate for creating CLIs.
 
-[Log]{https://crates.io/crates/log} and [Pretty Env Logger]{https://crates.io/crates/pretty_env_logger} for providing a simple framework for organizing logging messages.
+[Log](https://crates.io/crates/log) and [Pretty Env Logger](https://crates.io/crates/pretty_env_logger) for providing a simple framework for organizing logging messages.
