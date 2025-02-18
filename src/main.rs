@@ -4,7 +4,7 @@ use std::{io::Write, path::PathBuf};
 
 use xml::reader::EventReader;
 
-/// A command line utility to convert docx files into latex templates.
+/// A command line utility that converts docx files into latex templates.
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
