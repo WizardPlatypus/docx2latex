@@ -9,6 +9,7 @@ pub struct Prysm {
     stack: Vec<Tag>,
     rels: HashMap<String, String>,
     fa: State,
+    context: Context,
 }
 
 #[derive(Debug)]
@@ -21,6 +22,11 @@ enum State {
     None,
     NaryPr,
     Chr,
+}
+
+enum Context {
+    None,
+    Math,
 }
 
 #[derive(Debug)]
@@ -110,6 +116,7 @@ impl Prysm {
             stack: vec![],
             rels,
             fa: State::None,
+            context: Context::None,
         }
     }
 
@@ -148,21 +155,22 @@ impl Prysm {
                         "pic:blipFill" => Tag::PicBlipFill,
                         "m:oMathPara" => {
                             write!(buf_writer, "$$")?;
+                            self.context = Context::Math;
                             Tag::MoMathPara
                         }
                         "m:oMath" => Tag::MoMath,
                         "m:d" => {
                             write!(buf_writer, "(")?;
                             Tag::MDelim
-                        },
+                        }
                         "m:rad" => {
-                            write!(buf_writer, "\\sqrt");
+                            write!(buf_writer, "\\sqrt")?;
                             Tag::MRad
-                        },
+                        }
                         "m:deg" => {
-                            write!(buf_writer, "[");
+                            write!(buf_writer, "[")?;
                             Tag::MDeg
-                        },
+                        }
                         "m:r" => Tag::MRun,
                         "m:t" => Tag::MText,
                         "m:sub" => {
@@ -283,7 +291,9 @@ impl Prysm {
                     }
                 }
                 Ok(XmlEvent::Characters(content)) => {
-                    log::debug!("Characters {:?}", &content);
+                    log::debug!("Characters [Raw] {:?}", &content);
+                    let content = escape(&self.context, content.as_str());
+                    log::debug!("Characters [Escaped] {:?}", &content);
                     self.stack.push(Tag::Content(content));
                     self.process(buf_writer)?;
                     self.stack.pop();
@@ -370,10 +380,7 @@ impl Prysm {
                         if let Tag::WHyperlink(link) = &self.stack[n - 4] {
                             match link {
                                 Link::Anchor(anchor) => {
-                                    write!(
-                                        buf_writer,
-                                        "\\hyperlink{{{anchor}}}{{{content}}}"
-                                    )?;
+                                    write!(buf_writer, "\\hyperlink{{{anchor}}}{{{content}}}")?;
                                 }
                                 Link::Relationship(rel_id) => {
                                     if let Some(url) = self.rels.get(rel_id) {
@@ -427,6 +434,7 @@ impl Prysm {
                 write!(buf_writer, "}}")?;
             } else if let Tag::MoMathPara = &self.stack[n - 1] {
                 writeln!(buf_writer, "$$")?;
+                self.context = Context::None;
             } else if let Tag::MDeg = &self.stack[n - 1] {
                 write!(buf_writer, "]{{")?;
             } else if let Tag::MRad = &self.stack[n - 1] {
@@ -445,4 +453,40 @@ pub fn normalize(raw: &OwnedName) -> String {
     };
     id.push_str(&raw.local_name);
     id
+}
+
+fn escape(cxt: &Context, raw: &str) -> String {
+    let mut buf = String::new();
+    for c in raw.chars() {
+        match c {
+            '∞' => buf.push_str("\\infty "),
+            'π' => buf.push_str("\\pi "),
+            '&' => buf.push_str("\\& "),
+            '<' => {
+                if let Context::Math = cxt {
+                    buf.push('<');
+                } else {
+                    buf.push_str("\\textless");
+                }
+            }
+            '>' => {
+                if let Context::Math = cxt {
+                    buf.push('>');
+                } else {
+                    buf.push_str("\\textgreater");
+                }
+            }
+            '%' => buf.push_str("\\% "),
+            '$' => buf.push_str("\\$ "),
+            '{' => buf.push_str("\\{ "),
+            '#' => buf.push_str("\\# "),
+            '}' => buf.push_str("\\} "),
+            '~' => buf.push_str("\\~{} "),
+            '_' => buf.push_str("\\_"),
+            '±' => buf.push_str("\\pm"),
+            '∓' => buf.push_str("\\mp"),
+            c => buf.push(c),
+        }
+    }
+    buf
 }
