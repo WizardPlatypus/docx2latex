@@ -5,7 +5,7 @@ use xml::{
     reader::{EventReader, XmlEvent},
 };
 
-pub struct Prysm {
+pub struct Prism {
     stack: Vec<Tag>,
     rels: HashMap<String, String>,
     fa: State,
@@ -110,9 +110,9 @@ pub fn relationships(
     Ok(rels)
 }
 
-impl Prysm {
-    pub fn new(rels: HashMap<String, String>) -> Prysm {
-        Prysm {
+impl Prism {
+    pub fn new(rels: HashMap<String, String>) -> Prism {
+        Prism {
             stack: vec![],
             rels,
             fa: State::None,

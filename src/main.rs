@@ -102,7 +102,7 @@ fn main() -> std::io::Result<()> {
     log::debug!("Reading {:?}", &input);
     let mut parser = EventReader::new(std::io::BufReader::new(std::fs::File::open(&input)?));
 
-    let mut prysm = Prysm::new(rels);
+    let mut prysm = Prism::new(rels);
     prysm.document(&mut parser, &mut buf_writer)?;
 
     writeln!(&mut buf_writer, "\\end{{document}}")?;
