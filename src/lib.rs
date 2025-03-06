@@ -1,8 +1,9 @@
-use std::{collections::HashMap, io::Write};
+use std::{borrow::Cow, collections::HashMap, io::Write};
 
 use xml::{
+    attribute::OwnedAttribute,
     name::OwnedName,
-    reader::{EventReader, XmlEvent},
+    reader::{ErrorKind, EventReader, XmlEvent},
 };
 
 pub struct Prism {
@@ -67,6 +68,99 @@ pub enum Tag {
     Unknown { id: String },
 }
 
+pub enum InputError {
+    MissingAttributes {
+        id: String,
+        missing: Vec<&'static str>,
+    },
+}
+
+impl TryFrom<(OwnedName, Vec<OwnedAttribute>)> for Tag {
+    type Error = InputError;
+
+    fn try_from(value: (OwnedName, Vec<OwnedAttribute>)) -> Result<Self, Self::Error> {
+        let (name, atts) = value;
+        let id = normalize(&name);
+        let tag = match id.as_str() {
+            "a:graphic" => Tag::AGraphic,
+            "a:graphicData" => Tag::AGraphicData,
+            "a:blip" => {
+                if let Some(rel_id) = atts.iter().find(|&a| normalize(&a.name) == "r:embed") {
+                    Tag::ABlip {
+                        rel: rel_id.value.clone(),
+                    }
+                } else {
+                    return Err(InputError::MissingAttributes {
+                        id,
+                        missing: vec!["r:embed"],
+                    });
+                }
+            }
+            "pic:pic" => Tag::PicPic,
+            "pic:blipFill" => Tag::PicBlipFill,
+            "m:oMathPara" => Tag::MoMathPara,
+            "m:oMath" => Tag::MoMath,
+            "m:d" => Tag::MDelim,
+            "m:rad" => Tag::MRad,
+            "m:deg" => Tag::MDeg,
+            "m:r" => Tag::MRun,
+            "m:t" => Tag::MText,
+            "m:sub" => Tag::MSub,
+            "m:sup" => Tag::MSup,
+            "m:nary" => Tag::MNary,
+            "m:naryPr" => Tag::MNaryPr,
+            "m:chr" => {
+                if let Some(symbol) = atts.iter().find(|&a| normalize(&a.name) == "m:val") {
+                    Tag::MChr {
+                        value: symbol.value.clone(),
+                    }
+                } else {
+                    return Err(InputError::MissingAttributes {
+                        id,
+                        missing: vec!["m:val"],
+                    });
+                }
+            }
+            "m:f" => Tag::MFraction,
+            "m:func" => Tag::MFunc,
+            "m:fName" => Tag::MFName,
+            "m:num" => Tag::MNum,
+            "m:den" => Tag::MDen,
+            "wp:inline" => Tag::WPInline,
+            "wp:anchor" => Tag::WPAnchor,
+            "w:p" => Tag::WParagraph,
+            "w:r" => Tag::WRun,
+            "w:t" => Tag::WText,
+            "w:hyperlink" => {
+                if let Some(rel_id) = atts.iter().find(|&a| normalize(&a.name) == "r:id") {
+                    Tag::WHyperlink(Link::Relationship(rel_id.value.clone()))
+                } else if let Some(anchor) = atts.iter().find(|&a| normalize(&a.name) == "w:anchor")
+                {
+                    Tag::WHyperlink(Link::Anchor(anchor.value.clone()))
+                } else {
+                    return Err(InputError::MissingAttributes {
+                        id,
+                        missing: vec!["r:id", "w:anchor"],
+                    });
+                }
+            }
+            "w:bookmarkStart" => {
+                let anchor = atts
+                    .iter()
+                    .find(|&a| normalize(&a.name) == "w:anchor")
+                    .map(|a| a.value.clone())
+                    .unwrap_or("".to_string());
+                Tag::WBookmarkStart { anchor }
+            }
+            "w:bookmarkEnd" => Tag::WBookmarkEnd,
+            "w:document" => Tag::WDocument,
+            "w:drawing" => Tag::WDrawing,
+            _ => Tag::Unknown { id },
+        };
+        Ok(tag)
+    }
+}
+
 pub fn relationships(
     parser: &mut EventReader<std::io::BufReader<std::fs::File>>,
 ) -> Result<HashMap<String, String>, xml::reader::Error> {
@@ -125,162 +219,64 @@ impl Prism {
         parser: &mut EventReader<std::io::BufReader<std::fs::File>>,
         buf_writer: &mut std::io::BufWriter<std::fs::File>,
     ) -> std::io::Result<()> {
-        let mut bookmark_start = 0;
-        let mut hyperlink = 0;
-        let mut blip = 0;
         loop {
             match parser.next() {
                 Ok(XmlEvent::StartElement {
                     name, attributes, ..
                 }) => {
-                    let tag = normalize(&name);
-                    log::debug!("StartElement '{tag}'",);
-                    let element = match tag.as_str() {
-                        "a:graphic" => Tag::AGraphic,
-                        "a:graphicData" => Tag::AGraphicData,
-                        "a:blip" => {
-                            blip += 1;
-                            if let Some(rel_id) =
-                                attributes.iter().find(|&a| normalize(&a.name) == "r:embed")
-                            {
-                                Tag::ABlip {
-                                    rel: rel_id.value.clone(),
+                    let tag = match Tag::try_from((name, attributes)) {
+                        Ok(ok) => ok,
+                        Err(InputError::MissingAttributes { id, missing }) => {
+                            if id == "m:chr" {
+                                if let State::NaryPr = &self.fa {
+                                    self.fa = State::Chr;
                                 }
-                            } else {
-                                log::error!("\"a:blip\" #{blip} is missing atrribute \"r:embed\"");
-                                break;
                             }
+                            log::error!("Tag '{id}' is missing attributes: {missing:?}");
+                            continue;
                         }
-                        "pic:pic" => Tag::PicPic,
-                        "pic:blipFill" => Tag::PicBlipFill,
-                        "m:oMathPara" => {
-                            write!(buf_writer, "$$")?;
-                            self.context = Context::Math;
-                            Tag::MoMathPara
-                        }
-                        "m:oMath" => Tag::MoMath,
-                        "m:d" => {
-                            write!(buf_writer, "(")?;
-                            Tag::MDelim
-                        }
-                        "m:rad" => {
-                            write!(buf_writer, "\\sqrt")?;
-                            Tag::MRad
-                        }
-                        "m:deg" => {
-                            write!(buf_writer, "[")?;
-                            Tag::MDeg
-                        }
-                        "m:r" => Tag::MRun,
-                        "m:t" => Tag::MText,
-                        "m:sub" => {
-                            write!(buf_writer, "_{{")?;
-                            Tag::MSub
-                        }
-                        "m:sup" => {
-                            write!(buf_writer, "^{{")?;
-                            Tag::MSup
-                        }
-                        "m:nary" => Tag::MNary,
-                        "m:naryPr" => {
-                            self.fa = State::NaryPr;
-                            Tag::MNaryPr
-                        }
-                        "m:chr" => {
+                    };
+                    match &tag {
+                        Tag::MoMathPara => write!(buf_writer, "$$")?,
+                        Tag::MDelim => write!(buf_writer, "(")?,
+                        Tag::MRad => write!(buf_writer, "\\sqrt")?,
+                        Tag::MDeg => write!(buf_writer, "[")?,
+                        Tag::MSub => write!(buf_writer, "_{{")?,
+                        Tag::MSup => write!(buf_writer, "^{{")?,
+                        Tag::MNaryPr => self.fa = State::NaryPr,
+                        Tag::MChr { value } => {
                             if let State::NaryPr = &self.fa {
                                 self.fa = State::Chr;
                             }
-                            if let Some(symbol) =
-                                attributes.iter().find(|&a| normalize(&a.name) == "m:val")
-                            {
-                                write!(
-                                    buf_writer,
-                                    "\\{}",
-                                    match symbol.value.as_str() {
-                                        "⋀" => "bigwedge",
-                                        "⋁" => "bigvee",
-                                        "⋂" => "bigcap",
-                                        "⋃" => "bigcup",
-                                        "∐" => "coprod",
-                                        "∏" => "prod",
-                                        "∑" => "sum",
-                                        "∮" => "oint",
-                                        _ => "",
-                                    }
-                                )?;
-
-                                Tag::MChr {
-                                    value: symbol.value.clone(),
+                            write!(
+                                buf_writer,
+                                "\\{}",
+                                match value.as_str() {
+                                    "⋀" => "bigwedge",
+                                    "⋁" => "bigvee",
+                                    "⋂" => "bigcap",
+                                    "⋃" => "bigcup",
+                                    "∐" => "coprod",
+                                    "∏" => "prod",
+                                    "∑" => "sum",
+                                    "∮" => "oint",
+                                    _ => "",
                                 }
-                            } else {
-                                log::error!("\"m:chr\" #{blip} is missing atrribute \"m:val\"");
-                                break;
-                            }
+                            )?;
                         }
-                        "m:f" => {
-                            write!(buf_writer, "\\frac")?;
-                            Tag::MFraction
+                        Tag::MFraction => write!(buf_writer, "\\frac")?,
+                        Tag::MNum => write!(buf_writer, "{{")?,
+                        Tag::MDen => write!(buf_writer, "{{")?,
+                        Tag::Unknown { id } => {
+                            log::warn!("Ignoring tag '{id}'")
                         }
-                        "m:func" => Tag::MFunc,
-                        "m:fName" => Tag::MFName,
-                        "m:num" => {
-                            write!(buf_writer, "{{")?;
-                            Tag::MNum
-                        }
-                        "m:den" => {
-                            write!(buf_writer, "{{")?;
-                            Tag::MDen
-                        }
-                        "wp:inline" => Tag::WPInline,
-                        "wp:anchor" => Tag::WPAnchor,
-                        "w:p" => Tag::WParagraph,
-                        "w:r" => Tag::WRun,
-                        "w:t" => Tag::WText,
-                        "w:hyperlink" => {
-                            hyperlink += 1;
-                            if let Some(rel_id) =
-                                attributes.iter().find(|&a| normalize(&a.name) == "r:id")
-                            {
-                                Tag::WHyperlink(Link::Relationship(rel_id.value.clone()))
-                            } else if let Some(anchor) = attributes
-                                .iter()
-                                .find(|&a| normalize(&a.name) == "w:anchor")
-                            {
-                                Tag::WHyperlink(Link::Anchor(anchor.value.clone()))
-                            } else {
-                                log::error!("\"w:hyperlink\" #{hyperlink} is missing both \"r:Id\" and \"w:anchor\"");
-                                break;
-                            }
-                        }
-                        "w:bookmarkStart" => {
-                            bookmark_start += 1;
-                            if let Some(anchor) = attributes
-                                .iter()
-                                .find(|&a| normalize(&a.name) == "w:anchor")
-                            {
-                                Tag::WBookmarkStart {
-                                    anchor: anchor.value.clone(),
-                                }
-                            } else {
-                                log::warn!("Tag \"w:bookmarkStart\" #{bookmark_start} is missing attribute \"w:anchor\"");
-                                Tag::WBookmarkStart {
-                                    anchor: "".to_string(),
-                                }
-                            }
-                        }
-                        "w:bookmarkEnd" => Tag::WBookmarkEnd,
-                        "w:document" => Tag::WDocument,
-                        "w:drawing" => Tag::WDrawing,
-                        _ => {
-                            log::warn!("Ignored: {tag:?}");
-                            Tag::Unknown { id: tag }
-                        }
+                        _ => {}
                     };
-                    self.stack.push(element);
+                    self.stack.push(tag);
                 }
                 Ok(XmlEvent::EndElement { name }) => {
                     let id = normalize(&name);
-                    log::debug!("EndElement '{id}'",);
+                    // log::debug!("EndElement '{id}'",);
                     self.process(buf_writer)?;
                     if let Some(Tag::MNaryPr) = self.stack.pop() {
                         if let State::NaryPr = &self.fa {
@@ -445,6 +441,7 @@ impl Prism {
     }
 }
 
+// TODO: unit test candidate
 pub fn normalize(raw: &OwnedName) -> String {
     let mut id = if let Some(prefix) = raw.prefix_ref() {
         prefix.to_string() + ":"
@@ -455,6 +452,7 @@ pub fn normalize(raw: &OwnedName) -> String {
     id
 }
 
+// TODO: unit test candidate
 fn escape(cxt: &Context, raw: &str) -> String {
     let mut buf = String::new();
     for c in raw.chars() {
