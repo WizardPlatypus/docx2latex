@@ -5,6 +5,8 @@ use xml::{
     reader::{EventReader, XmlEvent},
 };
 
+pub mod styles;
+
 pub struct Prism {
     stack: Vec<Tag>,
     rels: HashMap<String, String>,
