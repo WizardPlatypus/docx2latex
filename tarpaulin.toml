@@ -1,0 +1,5 @@
+[modest]
+name = "docx2latex"
+force-clean = false
+skil-clean = true
+run-types = ["Lib"]
