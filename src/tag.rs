@@ -1,6 +1,6 @@
 use xml::{attribute::OwnedAttribute, name::OwnedName};
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Tag {
     AGraphic,
     AGraphicData,
@@ -37,7 +37,7 @@ pub enum Tag {
     Unknown { id: String },
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Link {
     Anchor(String),
     Relationship(String),
@@ -180,7 +180,6 @@ pub enum InputError {
     },
 }
 
-// TODO: unit test candidate
 pub fn normalize(raw: &OwnedName) -> String {
     let mut id = if let Some(prefix) = raw.prefix_ref() {
         prefix.to_string() + ":"
@@ -189,4 +188,54 @@ pub fn normalize(raw: &OwnedName) -> String {
     };
     id.push_str(&raw.local_name);
     id
+}
+
+#[cfg(test)]
+mod test {
+    use xml::name::OwnedName;
+
+    use crate::tag::normalize;
+
+    #[test]
+    fn normalize_works_with_prefix() {
+        let raw = OwnedName { local_name: "local_name".to_string(), namespace: None, prefix: Some("prefix".to_string()) };
+        assert_eq!(normalize(&raw), "prefix:local_name");
+    }
+
+    #[test]
+    fn normalize_works_without_prefix() {
+        let raw = OwnedName { local_name: "local_name".to_string(), namespace: None, prefix: None };
+        assert_eq!(normalize(&raw), "local_name");
+    }
+
+    #[test]
+    fn normalize_ignores_namespace() {
+        let no_namespace = OwnedName { local_name: "local_name".to_string(), namespace: None, prefix: None };
+        let yes_namespace = OwnedName { local_name: "local_name".to_string(), namespace: Some("namespace".to_string()), prefix: None };
+        assert_eq!(normalize(&no_namespace), normalize(&yes_namespace));
+    }
+
+    #[test]
+    fn normalize_accepts_empty_prefix() {
+        let raw = OwnedName { local_name: "local_name".to_string(), namespace: None, prefix: Some("".to_string()) };
+        assert_eq!(normalize(&raw), ":local_name");
+    }
+
+    fn owned(raw: &'static str) -> OwnedName {
+        let parts: Vec<_> = raw.split(':').collect();
+        OwnedName { local_name: parts[1].to_string(), namespace: None, prefix: Some(parts[0].to_string()) }
+    }
+
+    #[test]
+    fn converts_empty_tags() {
+        use super::Tag::*;
+        let raw = vec!["a:graphic", "a:graphicData", "pic:pic", "pic:blipFill", "m:oMathPara", "m:oMath", "m:d", "m:rad", "m:deg", "m:r", "m:t", "m:sub", "m:sup", "m:nary", "m:naryPr", "m:f", "m:func", "m:fName", "m:num", "m:den", "wp:inline", "wp:anchor", "w:bookmarkEnd", "w:drawing", "w:p", "w:r", "w:t"];
+        let expected = vec![AGraphic, AGraphicData, PicPic, PicBlipFill, MoMathPara, MoMath, MDelim, MRad, MDeg, MRun, MText, MSub, MSup, MNary, MNaryPr, MFraction, MFunc, MFName, MNum, MDen, WPInline, WPAnchor, WBookmarkEnd, WDrawing, WParagraph, WRun, WText];
+        assert_eq!(raw.len(), expected.len());
+        for i in 0..raw.len() {
+            let name = owned(raw[i]);
+            let actual = super::Tag::try_from((&name, &vec![])).expect("Input was constructed manually");
+            assert_eq!(actual, expected[i]);
+        }
+    }
 }
