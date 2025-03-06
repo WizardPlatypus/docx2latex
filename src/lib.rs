@@ -379,101 +379,62 @@ impl Prism {
         &mut self,
         buf_writer: &mut std::io::BufWriter<std::fs::File>,
     ) -> std::io::Result<()> {
-        // ["w:drawing", ("wp:inline"/"wp:anchor"), "a:graphic", "a:graphicData", "pic:pic", "pic:blipFill", "a:blip"]
-        // ["w:hyperlink", "w:r", "w:t", "text"] -> hyperlink(text)
-        // ["w:r", "w:t", "text"] -> text
-        // ["w:p"] -> newline
-        // ["w:bookmarkStart"] -> \hypertarget{anchor}{
-        // ["w:bookmarkEnd"] -> }
-        // ["m:d"] -> )
-        // [("m:sub"/"m:sup"/"m:num"/"m:den")] -> }
-        // ["m:oMathPara"] -> $$
-        // ["m:deg"] -> ]{
-        // ["m:rad"] -> }
         log::debug!("Stack: {:?}", &self.stack);
-        let n = self.stack.len();
-        if n > 6 {
-            if let Tag::ABlip { rel } = &self.stack[n - 1] {
-                if let Tag::PicBlipFill = &self.stack[n - 2] {
-                    if let Tag::PicPic = &self.stack[n - 3] {
-                        if let Tag::AGraphicData = &self.stack[n - 4] {
-                            if let Tag::AGraphic = &self.stack[n - 5] {
-                                let switch;
-                                if let Tag::WPInline = &self.stack[n - 6] {
-                                    switch = true;
-                                } else if let Tag::WPAnchor = &self.stack[n - 6] {
-                                    switch = true;
-                                } else {
-                                    switch = false;
-                                }
-                                if switch {
-                                    if let Tag::WDrawing = &self.stack[n - 7] {
-                                        if let Some(path) = self.rels.get(rel) {
-                                            let path = std::path::PathBuf::from(path);
-                                            write!(
-                                                buf_writer,
-                                                "\\includegraphics[width=\\textwidth]{{{:?}}}",
-                                                path.file_stem()
-                                                    .expect("Rels did not point to an image file")
-                                            )?;
-                                        } else {
-                                            log::error!("\"a:blip\" relies on a relationship that does not exist: {:?}", rel);
-                                        }
-                                        return Ok(());
-                                    }
-                                }
-                            }
-                        }
-                    }
+
+        // ["w:drawing", ("wp:inline"/"wp:anchor"), "a:graphic", "a:graphicData", "pic:pic", "pic:blipFill", "a:blip"]
+        if let Some(rel) = ooxml::drawing(&self.stack) {
+            latex::drawing(buf_writer, &self.rels, rel)?;
+            return Ok(());
+        }
+
+        // ["w:hyperlink", "w:r", "w:t", "text"] -> hyperlink(text)
+        if let Some(hyperlink) = ooxml::hyperlink(&self.stack) {
+            latex::hyperlink(buf_writer, &self.rels, hyperlink)?;
+            return Ok(());
+        }
+
+        // ["w:r", "w:t", "text"] -> text
+        if let Some(content) = ooxml::word_text(&self.stack) {
+            write!(buf_writer, "{}", content)?;
+            return Ok(());
+        }
+
+        // ["m:r", "m:t", "text"] -> text
+        if let Some(content) = ooxml::math_text(&self.stack) {
+            write!(buf_writer, "{}", content)?;
+            return Ok(());
+        }
+
+        self.stack.reset();
+        if let Some(tag) = self.stack.top() {
+            // ["w:p"] -> newline
+            // ["w:bookmarkStart"] -> \hypertarget{anchor}{
+            // ["m:d"] -> )
+            // ["m:oMathPara"] -> $$
+            // ["m:deg"] -> ]{
+            // [("m:sub"/"m:sup"/"m:num"/"m:den"/"m:rad"/"m:bookmarkEnd")] -> }
+            match tag {
+                Tag::WParagraph => {
+                    writeln!(buf_writer)?;
+                    writeln!(buf_writer)?;
                 }
-            }
-        }
-        if n > 3 {
-            if let Some(hyperlink) = ooxml_hyperlink(&self.stack) {
-                latex_hyperlink(buf_writer, &self.rels, hyperlink)?;
-                return Ok(());
-            }
-        }
-        if n > 2 {
-            if let Tag::Content(content) = &self.stack[n - 1] {
-                if let Tag::WText = &self.stack[n - 2] {
-                    if let Tag::WRun = &self.stack[n - 3] {
-                        write!(buf_writer, "{}", content)?;
-                        return Ok(());
-                    }
-                } else if let Tag::MText = &self.stack[n - 2] {
-                    if let Tag::MRun = &self.stack[n - 3] {
-                        write!(buf_writer, "{}", content)?;
-                        return Ok(());
-                    }
+                Tag::WBookmarkStart { anchor } => {
+                    write!(buf_writer, "\\hypertarget{{{anchor}}}{{")?;
                 }
-            }
-        }
-        if n > 0 {
-            if let Tag::WParagraph = &self.stack[n - 1] {
-                writeln!(buf_writer)?;
-                writeln!(buf_writer)?;
-            } else if let Tag::WBookmarkStart { anchor: name } = &self.stack[n - 1] {
-                write!(buf_writer, "\\hypertarget{{{name}}}{{")?;
-            } else if let Tag::WBookmarkEnd = &self.stack[n - 1] {
-                write!(buf_writer, "}}")?;
-            } else if let Tag::MDelim = &self.stack[n - 1] {
-                write!(buf_writer, ")")?;
-            } else if let Tag::MSub = &self.stack[n - 1] {
-                write!(buf_writer, "}}")?;
-            } else if let Tag::MSup = &self.stack[n - 1] {
-                write!(buf_writer, "}}")?;
-            } else if let Tag::MNum = &self.stack[n - 1] {
-                write!(buf_writer, "}}")?;
-            } else if let Tag::MDen = &self.stack[n - 1] {
-                write!(buf_writer, "}}")?;
-            } else if let Tag::MoMathPara = &self.stack[n - 1] {
-                writeln!(buf_writer, "$$")?;
-                self.context = Context::None;
-            } else if let Tag::MDeg = &self.stack[n - 1] {
-                write!(buf_writer, "]{{")?;
-            } else if let Tag::MRad = &self.stack[n - 1] {
-                write!(buf_writer, "}}")?;
+                Tag::MDelim => {
+                    write!(buf_writer, ")")?;
+                }
+                Tag::MoMathPara => {
+                    writeln!(buf_writer, "$$")?;
+                    self.context = Context::None;
+                }
+                Tag::MDeg => {
+                    write!(buf_writer, "]{{")?;
+                }
+                Tag::MSub | Tag::MSup | Tag::MNum | Tag::MDen | Tag::MRad | Tag::WBookmarkEnd => {
+                    write!(buf_writer, "}}")?;
+                }
+                _ => {}
             }
         }
         Ok(())
@@ -528,33 +489,96 @@ fn escape(cxt: &Context, raw: &str) -> String {
     buf
 }
 
-fn ooxml_hyperlink(boo: &Boo<Tag>) -> Option<(&Link, &String)> {
-    boo.reset();
-    let content = boo.peek().content()?;
-    blink(matches!(boo.peek(), Tag::WText))?;
-    blink(matches!(boo.peek(), Tag::WRun))?;
-    let link = boo.peek().w_hyperlink()?;
-    Some((link, content))
+mod ooxml {
+    use super::{blink, Boo, Link, Tag};
+
+    pub fn hyperlink(boo: &Boo<Tag>) -> Option<(&Link, &String)> {
+        boo.reset();
+        let content = boo.peek()?.content()?;
+        blink(matches!(boo.peek()?, Tag::WText))?;
+        blink(matches!(boo.peek()?, Tag::WRun))?;
+        let link = boo.peek()?.w_hyperlink()?;
+        Some((link, content))
+    }
+
+    pub fn drawing(boo: &Boo<Tag>) -> Option<&String> {
+        boo.reset();
+        let rel = boo.peek()?.a_blip()?;
+        blink(matches!(boo.peek()?, Tag::PicBlipFill))?;
+        blink(matches!(boo.peek()?, Tag::PicPic))?;
+        blink(matches!(boo.peek()?, Tag::AGraphicData))?;
+        blink(matches!(boo.peek()?, Tag::AGraphic))?;
+        blink(matches!(boo.peek()?, Tag::WPInline) || matches!(boo.top()?, Tag::WPAnchor))?;
+        blink(matches!(boo.peek()?, Tag::WDrawing))?;
+        Some(rel)
+    }
+
+    pub fn word_text(boo: &Boo<Tag>) -> Option<&String> {
+        boo.reset();
+        let content = boo.peek()?.content()?;
+        blink(matches!(boo.peek()?, Tag::WText))?;
+        blink(matches!(boo.peek()?, Tag::WRun))?;
+        Some(content)
+    }
+
+    pub fn math_text(boo: &Boo<Tag>) -> Option<&String> {
+        boo.reset();
+        let content = boo.peek()?.content()?;
+        blink(matches!(boo.peek()?, Tag::MText))?;
+        blink(matches!(boo.peek()?, Tag::MRun))?;
+        Some(content)
+    }
 }
 
-fn latex_hyperlink(
-    buf_writer: &mut BufWriter<File>,
-    rels: &HashMap<String, String>,
-    hyperlink: (&Link, &String),
-) -> std::io::Result<()> {
-    let (link, content) = hyperlink;
-    match link {
-        Link::Anchor(anchor) => {
-            write!(buf_writer, "\\hyperlink{{{anchor}}}{{{content}}}")?;
-        }
-        Link::Relationship(rel_id) => {
-            if let Some(url) = rels.get(rel_id) {
-                write!(buf_writer, "\\href{{{url}}}{{{content}}}")?;
-            } else {
-                log::error!("Hyperlink relies on a missing relationship {rel_id:?}");
-                write!(buf_writer, "{content}")?;
+mod latex {
+    use super::Link;
+    use std::{
+        collections::HashMap,
+        fs::File,
+        io::{BufWriter, Write},
+    };
+
+    pub fn hyperlink(
+        buf_writer: &mut BufWriter<File>,
+        rels: &HashMap<String, String>,
+        hyperlink: (&Link, &String),
+    ) -> std::io::Result<()> {
+        let (link, content) = hyperlink;
+        match link {
+            Link::Anchor(anchor) => {
+                write!(buf_writer, "\\hyperlink{{{anchor}}}{{{content}}}")?;
+            }
+            Link::Relationship(rel_id) => {
+                if let Some(url) = rels.get(rel_id) {
+                    write!(buf_writer, "\\href{{{url}}}{{{content}}}")?;
+                } else {
+                    log::error!("Hyperlink relies on a missing relationship {rel_id:?}");
+                    write!(buf_writer, "{content}")?;
+                }
             }
         }
+        Ok(())
     }
-    Ok(())
+
+    pub fn drawing(
+        buf_writer: &mut BufWriter<File>,
+        rels: &HashMap<String, String>,
+        rel: &String,
+    ) -> std::io::Result<()> {
+        if let Some(path) = rels.get(rel) {
+            let path = std::path::PathBuf::from(path);
+            write!(
+                buf_writer,
+                "\\includegraphics[width=\\textwidth]{{{:?}}}",
+                path.file_stem()
+                    .expect("Rels did not point to an image file")
+            )?;
+        } else {
+            log::error!(
+                "Drawing relies on a relationship that does not exist: {:?}",
+                rel
+            );
+        }
+        Ok(())
+    }
 }

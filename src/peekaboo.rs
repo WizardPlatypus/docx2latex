@@ -8,15 +8,15 @@ pub struct Boo<T> {
 }
 
 impl<T> Boo<T> {
-    pub fn top(&self) -> &T {
+    pub fn top(&self) -> Option<&T> {
         let peeked = self.peeked.get();
-        &self.vec[self.vec.len() - peeked - 1]
+        self.vec.get(self.vec.len() - peeked - 1)
     }
 
-    pub fn peek(&self) -> &T {
+    pub fn peek(&self) -> Option<&T> {
         let peeked = self.peeked.get();
         self.peeked.set(peeked + 1);
-        &self.vec[self.vec.len() - peeked - 1]
+        self.vec.get(self.vec.len() - peeked - 1)
     }
 
     pub fn reset(&self) {
