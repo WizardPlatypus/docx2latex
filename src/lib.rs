@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     fs::File,
-    io::{BufWriter, Write},
+    io::{BufReader, BufWriter, Write},
 };
 
 use xml::{
@@ -17,24 +17,6 @@ mod tag;
 
 use peekaboo::Boo;
 use tag::{normalize, InputError, Link, Tag};
-
-pub struct Prism {
-    stack: Boo<Tag>,
-    rels: HashMap<String, String>,
-    fa: State,
-    context: Context,
-}
-
-enum State {
-    None,
-    NaryPr,
-    Chr,
-}
-
-enum Context {
-    None,
-    Math,
-}
 
 fn blink(value: bool) -> Option<()> {
     if value {
@@ -87,190 +69,218 @@ pub fn relationships(
     Ok(rels)
 }
 
-impl Prism {
-    pub fn new(rels: HashMap<String, String>) -> Prism {
-        Prism {
-            stack: vec![].into(),
-            rels,
-            fa: State::None,
-            context: Context::None,
-        }
+enum State {
+    OpenedTag(Tag),
+    ClosedTag,
+    FoundContent(String),
+    AttributesMissing,
+    RelationshipMissing,
+    Happy,
+}
+
+fn start_element(
+    buf_writer: &mut BufWriter<File>,
+    name: &OwnedName,
+    attributes: &Vec<OwnedAttribute>,
+    nary_has_chr: &mut Option<bool>,
+) -> std::io::Result<State> {
+    let tag = Tag::try_from((name, attributes));
+
+    if let Err(InputError::MissingAttributes { id, missing }) = &tag {
+        log::error!("Tag '{id}' is missing attributes: {missing:?}");
+        return Ok(State::AttributesMissing);
     }
 
-    fn start_element(
-        &mut self,
-        buf_writer: &mut BufWriter<File>,
-        name: &OwnedName,
-        attributes: &Vec<OwnedAttribute>,
-    ) -> std::io::Result<()> {
-        let tag = Tag::try_from((name, attributes));
+    let tag = tag.expect("Error case was handled");
 
-        if let Err(InputError::MissingAttributes { id, missing }) = &tag {
-            if id == "m:chr" {
-                if let State::NaryPr = &self.fa {
-                    self.fa = State::Chr;
-                }
+    match &tag {
+        Tag::MoMathPara => write!(buf_writer, "$$")?,
+        Tag::MDelim => write!(buf_writer, "(")?,
+        Tag::MRad => write!(buf_writer, "\\sqrt")?,
+        Tag::MDeg => write!(buf_writer, "[")?,
+        Tag::MSub => write!(buf_writer, "_{{")?,
+        Tag::MSup => write!(buf_writer, "^{{")?,
+        Tag::MNaryPr => *nary_has_chr = Some(false),
+        Tag::MChr { value } => {
+            if let Some(false) = nary_has_chr {
+                *nary_has_chr = Some(true);
+            } else if let Some(true) = nary_has_chr {
+                log::error!("<m:naryPr> has multiple <m:chr> specified");
             }
-            log::error!("Tag '{id}' is missing attributes: {missing:?}");
-            return Ok(());
+            write!(
+                buf_writer,
+                "\\{}",
+                match value.as_str() {
+                    "⋀" => "bigwedge",
+                    "⋁" => "bigvee",
+                    "⋂" => "bigcap",
+                    "⋃" => "bigcup",
+                    "∐" => "coprod",
+                    "∏" => "prod",
+                    "∑" => "sum",
+                    "∮" => "oint",
+                    _ => "",
+                }
+            )?;
         }
+        Tag::MFraction => write!(buf_writer, "\\frac")?,
+        Tag::MNum => write!(buf_writer, "{{")?,
+        Tag::MDen => write!(buf_writer, "{{")?,
+        Tag::Unknown { id } => {
+            log::warn!("Ignoring tag '{id}'")
+        }
+        _ => {}
+    };
 
-        let tag = tag.expect("Error case was handled");
+    Ok(State::OpenedTag(tag))
+}
 
-        match &tag {
-            Tag::MoMathPara => write!(buf_writer, "$$")?,
-            Tag::MDelim => write!(buf_writer, "(")?,
-            Tag::MRad => write!(buf_writer, "\\sqrt")?,
-            Tag::MDeg => write!(buf_writer, "[")?,
-            Tag::MSub => write!(buf_writer, "_{{")?,
-            Tag::MSup => write!(buf_writer, "^{{")?,
-            Tag::MNaryPr => self.fa = State::NaryPr,
-            Tag::MChr { value } => {
-                if let State::NaryPr = &self.fa {
-                    self.fa = State::Chr;
-                }
-                write!(
-                    buf_writer,
-                    "\\{}",
-                    match value.as_str() {
-                        "⋀" => "bigwedge",
-                        "⋁" => "bigvee",
-                        "⋂" => "bigcap",
-                        "⋃" => "bigcup",
-                        "∐" => "coprod",
-                        "∏" => "prod",
-                        "∑" => "sum",
-                        "∮" => "oint",
-                        _ => "",
-                    }
-                )?;
+fn end_element(
+    buf_writer: &mut BufWriter<File>,
+    stack: &Boo<Tag>,
+    rels: &HashMap<String, String>,
+    math_mode: &mut bool,
+    nary_has_chr: &mut Option<bool>,
+) -> std::io::Result<State> {
+    log::debug!("Stack: {:?}", &stack);
+
+    if let Some(rel) = ooxml::drawing(stack) {
+        // ["w:drawing", ("wp:inline"/"wp:anchor"), "a:graphic", "a:graphicData", "pic:pic", "pic:blipFill", "a:blip"]
+        latex::drawing(buf_writer, rels, rel)?;
+    } else if let Some(hyperlink) = ooxml::hyperlink(stack) {
+        // ["w:hyperlink", "w:r", "w:t", "text"] -> hyperlink(text)
+        latex::hyperlink(buf_writer, rels, hyperlink)?;
+    } else if let Some(content) = ooxml::word_text(stack) {
+        // ["w:r", "w:t", "text"] -> text
+        write!(buf_writer, "{}", content)?;
+    } else if let Some(content) = ooxml::math_text(stack) {
+        // ["m:r", "m:t", "text"] -> text
+        write!(buf_writer, "{}", content)?;
+    } else if let Some(tag) = stack.last() {
+        // ["w:p"] -> newline
+        // ["w:bookmarkStart"] -> \hypertarget{anchor}{
+        // ["m:d"] -> )
+        // ["m:oMathPara"] -> $$
+        // ["m:deg"] -> ]{
+        // [("m:sub"/"m:sup"/"m:num"/"m:den"/"m:rad"/"m:bookmarkEnd")] -> }
+        match tag {
+            Tag::WParagraph => {
+                writeln!(buf_writer)?;
+                writeln!(buf_writer)?;
             }
-            Tag::MFraction => write!(buf_writer, "\\frac")?,
-            Tag::MNum => write!(buf_writer, "{{")?,
-            Tag::MDen => write!(buf_writer, "{{")?,
-            Tag::Unknown { id } => {
-                log::warn!("Ignoring tag '{id}'")
+            Tag::WBookmarkStart { anchor } => {
+                write!(buf_writer, "\\hypertarget{{{anchor}}}{{")?;
+            }
+            Tag::MDelim => {
+                write!(buf_writer, ")")?;
+            }
+            Tag::MoMathPara => {
+                writeln!(buf_writer, "$$")?;
+                if !*math_mode {
+                    log::error!("Exiting Math Mode without entering Math Mode");
+                }
+                *math_mode = false;
+            }
+            Tag::MDeg => {
+                write!(buf_writer, "]{{")?;
+            }
+            Tag::MSub | Tag::MSup | Tag::MNum | Tag::MDen | Tag::MRad | Tag::WBookmarkEnd => {
+                write!(buf_writer, "}}")?;
+            }
+            Tag::MNaryPr => {
+                if let Some(false) = nary_has_chr {
+                    // m:naryPr with no m:chr within are treated as integrals
+                    write!(buf_writer, "\\int")?;
+                }
+                *nary_has_chr = None;
             }
             _ => {}
-        };
-
-        self.stack.push(tag);
-
-        Ok(())
-    }
-
-    fn end_element(&mut self, buf_writer: &mut BufWriter<File>) -> std::io::Result<()> {
-        log::debug!("Stack: {:?}", &self.stack);
-
-        if let Some(rel) = ooxml::drawing(&self.stack) {
-            // ["w:drawing", ("wp:inline"/"wp:anchor"), "a:graphic", "a:graphicData", "pic:pic", "pic:blipFill", "a:blip"]
-            latex::drawing(buf_writer, &self.rels, rel)?;
-        } else if let Some(hyperlink) = ooxml::hyperlink(&self.stack) {
-            // ["w:hyperlink", "w:r", "w:t", "text"] -> hyperlink(text)
-            latex::hyperlink(buf_writer, &self.rels, hyperlink)?;
-        } else if let Some(content) = ooxml::word_text(&self.stack) {
-            // ["w:r", "w:t", "text"] -> text
-            write!(buf_writer, "{}", content)?;
-        } else if let Some(content) = ooxml::math_text(&self.stack) {
-            // ["m:r", "m:t", "text"] -> text
-            write!(buf_writer, "{}", content)?;
-        } else if let Some(tag) = self.stack.last() {
-            // ["w:p"] -> newline
-            // ["w:bookmarkStart"] -> \hypertarget{anchor}{
-            // ["m:d"] -> )
-            // ["m:oMathPara"] -> $$
-            // ["m:deg"] -> ]{
-            // [("m:sub"/"m:sup"/"m:num"/"m:den"/"m:rad"/"m:bookmarkEnd")] -> }
-            match tag {
-                Tag::WParagraph => {
-                    writeln!(buf_writer)?;
-                    writeln!(buf_writer)?;
-                }
-                Tag::WBookmarkStart { anchor } => {
-                    write!(buf_writer, "\\hypertarget{{{anchor}}}{{")?;
-                }
-                Tag::MDelim => {
-                    write!(buf_writer, ")")?;
-                }
-                Tag::MoMathPara => {
-                    writeln!(buf_writer, "$$")?;
-                    self.context = Context::None;
-                }
-                Tag::MDeg => {
-                    write!(buf_writer, "]{{")?;
-                }
-                Tag::MSub | Tag::MSup | Tag::MNum | Tag::MDen | Tag::MRad | Tag::WBookmarkEnd => {
-                    write!(buf_writer, "}}")?;
-                }
-                Tag::MNaryPr => {
-                    if let State::NaryPr = &self.fa {
-                        // m:naryPr with no m:chr within are treated as integrals
-                        write!(buf_writer, "\\int")?;
-                    }
-                    self.fa = State::None;
-                }
-                _ => {}
-            }
-        }
-
-        self.stack.pop();
-
-        Ok(())
-    }
-
-    fn xml_event(
-        &mut self,
-        buf_writer: &mut BufWriter<File>,
-        event: &XmlEvent,
-    ) -> std::io::Result<()> {
-        match event {
-            XmlEvent::StartElement {
-                name, attributes, ..
-            } => self.start_element(buf_writer, name, attributes),
-            XmlEvent::EndElement { .. } => self.end_element(buf_writer),
-            XmlEvent::Characters(content) => {
-                log::debug!("Characters [Raw] {:?}", &content);
-                let content = escape(&self.context, content.as_str());
-                log::debug!("Characters [Escaped] {:?}", &content);
-                self.stack.push(Tag::Content(content));
-                self.end_element(buf_writer)
-            }
-            XmlEvent::StartDocument { version, .. } => {
-                log::debug!("StartDocument {version}");
-                Ok(())
-            }
-            XmlEvent::EndDocument => {
-                log::debug!("EndDocument");
-                Ok(())
-            }
-            XmlEvent::Whitespace(_) => Ok(()),
-            event => {
-                log::warn!("Unmatched Event: {event:?}");
-                Ok(())
-            }
         }
     }
 
-    pub fn document(
-        &mut self,
-        parser: &mut EventReader<std::io::BufReader<std::fs::File>>,
-        buf_writer: &mut std::io::BufWriter<std::fs::File>,
-    ) -> std::io::Result<()> {
-        loop {
-            match parser.next() {
-                Ok(event) => self.xml_event(buf_writer, &event)?,
-                Err(error) => {
-                    log::error!("Error: {error}");
-                    break;
-                }
-            }
+    Ok(State::ClosedTag)
+}
+
+fn xml_event(
+    buf_writer: &mut BufWriter<File>,
+    stack: &Boo<Tag>,
+    rels: &HashMap<String, String>,
+    event: &XmlEvent,
+    math_mode: &mut bool,
+    nary_has_chr: &mut Option<bool>,
+) -> std::io::Result<State> {
+    match event {
+        XmlEvent::StartElement {
+            name, attributes, ..
+        } => start_element(buf_writer, name, attributes, nary_has_chr),
+        XmlEvent::EndElement { .. } => {
+            end_element(buf_writer, stack, rels, math_mode, nary_has_chr)
         }
-        Ok(())
+        XmlEvent::Characters(content) => {
+            log::debug!("Characters [Raw] {:?}", content);
+            let content = escape(content, math_mode);
+            log::debug!("Characters [Escaped] {:?}", &content);
+            Ok(State::FoundContent(content))
+        }
+        XmlEvent::StartDocument { version, .. } => {
+            log::debug!("StartDocument {version}");
+            Ok(State::Happy)
+        }
+        XmlEvent::EndDocument => {
+            log::debug!("EndDocument");
+            Ok(State::Happy)
+        }
+        XmlEvent::Whitespace(_) => Ok(State::Happy),
+        event => {
+            log::warn!("Unmatched Event: {event:?}");
+            Ok(State::Happy)
+        }
     }
 }
 
+pub fn document(
+    parser: &mut EventReader<BufReader<File>>,
+    buf_writer: &mut BufWriter<File>,
+    rels: &HashMap<String, String>,
+) -> std::io::Result<()> {
+    let mut stack = Boo::default();
+    let mut math_mode = false;
+    let mut nary_has_chr = None;
+    loop {
+        match parser.next() {
+            Ok(event) => match xml_event(
+                buf_writer,
+                &stack,
+                rels,
+                &event,
+                &mut math_mode,
+                &mut nary_has_chr,
+            )? {
+                State::OpenedTag(tag) => {
+                    stack.push(tag);
+                }
+                State::ClosedTag => {
+                    stack.pop();
+                }
+                State::FoundContent(content) => {
+                    stack.push(Tag::Content(content));
+                    let _ =
+                        end_element(buf_writer, &stack, rels, &mut math_mode, &mut nary_has_chr)?;
+                    stack.pop();
+                }
+                State::AttributesMissing | State::RelationshipMissing | State::Happy => {}
+            },
+            Err(error) => {
+                log::error!("Error: {error}");
+                break;
+            }
+        }
+    }
+    Ok(())
+}
+
 // TODO: unit test candidate
-fn escape(cxt: &Context, raw: &str) -> String {
+fn escape(raw: &str, math_mode: &bool) -> String {
     let mut buf = String::new();
     for c in raw.chars() {
         match c {
@@ -278,14 +288,14 @@ fn escape(cxt: &Context, raw: &str) -> String {
             'π' => buf.push_str("\\pi "),
             '&' => buf.push_str("\\& "),
             '<' => {
-                if let Context::Math = cxt {
+                if *math_mode {
                     buf.push('<');
                 } else {
                     buf.push_str("\\textless");
                 }
             }
             '>' => {
-                if let Context::Math = cxt {
+                if *math_mode {
                     buf.push('>');
                 } else {
                     buf.push_str("\\textgreater");

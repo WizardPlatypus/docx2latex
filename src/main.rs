@@ -1,5 +1,4 @@
 use clap::Parser;
-use docx2latex::*;
 use std::{io::Write, path::PathBuf};
 
 use xml::reader::EventReader;
@@ -70,7 +69,10 @@ fn main() -> std::io::Result<()> {
     writeln!(&mut buf_writer, "\\usepackage[T2A]{{fontenc}}")?;
     writeln!(&mut buf_writer, "\\usepackage[utf8]{{inputenc}}")?;
     writeln!(&mut buf_writer, "\\usepackage[fontsize=16pt]{{fontsize}}")?;
-    writeln!(&mut buf_writer, "\\usepackage[left=2cm,right=2cm,bottom=2cm]{{geometry}}")?;
+    writeln!(
+        &mut buf_writer,
+        "\\usepackage[left=2cm,right=2cm,bottom=2cm]{{geometry}}"
+    )?;
     writeln!(&mut buf_writer, "\\usepackage[english,ukrainian]{{babel}}")?;
     writeln!(&mut buf_writer, "\\usepackage{{amsmath}}")?;
     writeln!(&mut buf_writer, "\\usepackage{{amssymb}}")?;
@@ -85,7 +87,6 @@ fn main() -> std::io::Result<()> {
     writeln!(&mut buf_writer)?;
     writeln!(&mut buf_writer, "\\begin{{document}}")?;
     writeln!(&mut buf_writer)?;
-
 
     input.push("_rels");
     input.push("document.xml.rels");
@@ -102,8 +103,7 @@ fn main() -> std::io::Result<()> {
     log::debug!("Reading {:?}", &input);
     let mut parser = EventReader::new(std::io::BufReader::new(std::fs::File::open(&input)?));
 
-    let mut prysm = Prism::new(rels);
-    prysm.document(&mut parser, &mut buf_writer)?;
+    docx2latex::document(&mut parser, &mut buf_writer, &rels)?;
 
     writeln!(&mut buf_writer, "\\end{{document}}")?;
 

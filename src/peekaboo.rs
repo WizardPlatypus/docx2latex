@@ -1,7 +1,6 @@
 use std::{cell::Cell, fmt::Debug, ops::{Deref, DerefMut}};
 
 /// A stack that allows to peek at progressively more elements
-#[derive(Default)]
 pub struct Boo<T> {
     vec: Vec<T>,
     peeked: Cell<usize>
@@ -21,6 +20,12 @@ impl<T> Boo<T> {
 
     pub fn reset(&self) {
         self.peeked.set(0);
+    }
+}
+
+impl<T> Default for Boo<T> {
+    fn default() -> Self {
+        Self { vec: vec![], peeked: Default::default() }
     }
 }
 
