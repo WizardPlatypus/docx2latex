@@ -1,4 +1,9 @@
-use std::{borrow::Cow, collections::HashMap, io::Write};
+use std::{
+    borrow::Cow,
+    collections::HashMap,
+    fs::File,
+    io::{BufWriter, Write},
+};
 
 use xml::{
     attribute::OwnedAttribute,
@@ -6,8 +11,12 @@ use xml::{
     reader::{ErrorKind, EventReader, XmlEvent},
 };
 
+pub mod peekaboo;
+
+use peekaboo::Boo;
+
 pub struct Prism {
-    stack: Vec<Tag>,
+    stack: Boo<Tag>,
     rels: HashMap<String, String>,
     fa: State,
     context: Context,
@@ -34,7 +43,6 @@ enum Context {
 pub enum Tag {
     AGraphic,
     AGraphicData,
-    ABlip { rel: String },
     PicPic,
     PicBlipFill,
     MoMathPara,
@@ -48,7 +56,6 @@ pub enum Tag {
     MSup,
     MNary,
     MNaryPr,
-    MChr { value: String },
     MFraction,
     MFunc,
     MFName,
@@ -56,16 +63,68 @@ pub enum Tag {
     MDen,
     WPInline,
     WPAnchor,
-    WBookmarkStart { anchor: String },
     WBookmarkEnd,
     WDocument,
     WDrawing,
     WParagraph,
     WRun,
     WText,
+    ABlip { rel: String },
+    MChr { value: String },
+    WBookmarkStart { anchor: String },
     WHyperlink(Link),
     Content(String),
     Unknown { id: String },
+}
+
+impl Tag {
+    pub fn a_blip(&self) -> Option<&String> {
+        if let Tag::ABlip { rel } = self {
+            Some(rel)
+        } else {
+            None
+        }
+    }
+
+    pub fn m_chr(&self) -> Option<&String> {
+        if let Tag::MChr { value } = self {
+            Some(value)
+        } else {
+            None
+        }
+    }
+
+    pub fn w_bookmark_start(&self) -> Option<&String> {
+        if let Tag::WBookmarkStart { anchor } = self {
+            Some(anchor)
+        } else {
+            None
+        }
+    }
+
+    pub fn w_hyperlink(&self) -> Option<&Link> {
+        if let Tag::WHyperlink(value) = self {
+            Some(value)
+        } else {
+            None
+        }
+    }
+
+    pub fn content(&self) -> Option<&String> {
+        if let Tag::Content(value) = self {
+            Some(value)
+        } else {
+            None
+        }
+    }
+}
+
+fn blink(value: bool) -> Option<()> {
+    if value {
+        Some(())
+    } else {
+        None
+    }
 }
 
 pub enum InputError {
@@ -207,7 +266,7 @@ pub fn relationships(
 impl Prism {
     pub fn new(rels: HashMap<String, String>) -> Prism {
         Prism {
-            stack: vec![],
+            stack: vec![].into(),
             rels,
             fa: State::None,
             context: Context::None,
@@ -370,29 +429,9 @@ impl Prism {
             }
         }
         if n > 3 {
-            if let Tag::Content(content) = &self.stack[n - 1] {
-                if let Tag::WText = &self.stack[n - 2] {
-                    if let Tag::WRun = &self.stack[n - 3] {
-                        if let Tag::WHyperlink(link) = &self.stack[n - 4] {
-                            match link {
-                                Link::Anchor(anchor) => {
-                                    write!(buf_writer, "\\hyperlink{{{anchor}}}{{{content}}}")?;
-                                }
-                                Link::Relationship(rel_id) => {
-                                    if let Some(url) = self.rels.get(rel_id) {
-                                        write!(buf_writer, "\\href{{{url}}}{{{content}}}")?;
-                                    } else {
-                                        log::error!(
-                                            "Hyperlink relies on a missing relationship {rel_id:?}"
-                                        );
-                                        write!(buf_writer, "{content}")?;
-                                    }
-                                }
-                            }
-                            return Ok(());
-                        }
-                    }
-                }
+            if let Some(hyperlink) = ooxml_hyperlink(&self.stack) {
+                latex_hyperlink(buf_writer, &self.rels, hyperlink)?;
+                return Ok(());
             }
         }
         if n > 2 {
@@ -487,4 +526,35 @@ fn escape(cxt: &Context, raw: &str) -> String {
         }
     }
     buf
+}
+
+fn ooxml_hyperlink(boo: &Boo<Tag>) -> Option<(&Link, &String)> {
+    boo.reset();
+    let content = boo.peek().content()?;
+    blink(matches!(boo.peek(), Tag::WText))?;
+    blink(matches!(boo.peek(), Tag::WRun))?;
+    let link = boo.peek().w_hyperlink()?;
+    Some((link, content))
+}
+
+fn latex_hyperlink(
+    buf_writer: &mut BufWriter<File>,
+    rels: &HashMap<String, String>,
+    hyperlink: (&Link, &String),
+) -> std::io::Result<()> {
+    let (link, content) = hyperlink;
+    match link {
+        Link::Anchor(anchor) => {
+            write!(buf_writer, "\\hyperlink{{{anchor}}}{{{content}}}")?;
+        }
+        Link::Relationship(rel_id) => {
+            if let Some(url) = rels.get(rel_id) {
+                write!(buf_writer, "\\href{{{url}}}{{{content}}}")?;
+            } else {
+                log::error!("Hyperlink relies on a missing relationship {rel_id:?}");
+                write!(buf_writer, "{content}")?;
+            }
+        }
+    }
+    Ok(())
 }
