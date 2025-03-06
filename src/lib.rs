@@ -76,12 +76,14 @@ enum State {
     AttributesMissing,
     RelationshipMissing,
     Happy,
+    End,
 }
 
 fn start_element(
     buf_writer: &mut BufWriter<File>,
     name: &OwnedName,
     attributes: &Vec<OwnedAttribute>,
+    math_mode: &mut bool,
     nary_has_chr: &mut Option<bool>,
 ) -> std::io::Result<State> {
     let tag = Tag::try_from((name, attributes));
@@ -94,13 +96,26 @@ fn start_element(
     let tag = tag.expect("Error case was handled");
 
     match &tag {
-        Tag::MoMathPara => write!(buf_writer, "$$")?,
+        Tag::MoMathPara => {
+            if *math_mode {
+                log::error!("Entering Math Mode multiple times");
+            } else {
+                *math_mode = true;
+                write!(buf_writer, "$$")?;
+            }
+        },
         Tag::MDelim => write!(buf_writer, "(")?,
         Tag::MRad => write!(buf_writer, "\\sqrt")?,
         Tag::MDeg => write!(buf_writer, "[")?,
         Tag::MSub => write!(buf_writer, "_{{")?,
         Tag::MSup => write!(buf_writer, "^{{")?,
-        Tag::MNaryPr => *nary_has_chr = Some(false),
+        Tag::MNaryPr => {
+            if nary_has_chr.is_none() {
+                *nary_has_chr = Some(false);
+            } else {
+                log::error!("Nested <m:naryPr> detected");
+            }
+        },
         Tag::MChr { value } => {
             if let Some(false) = nary_has_chr {
                 *nary_has_chr = Some(true);
@@ -212,7 +227,7 @@ fn xml_event(
     match event {
         XmlEvent::StartElement {
             name, attributes, ..
-        } => start_element(buf_writer, name, attributes, nary_has_chr),
+        } => start_element(buf_writer, name, attributes, math_mode, nary_has_chr),
         XmlEvent::EndElement { .. } => {
             end_element(buf_writer, stack, rels, math_mode, nary_has_chr)
         }
@@ -228,9 +243,12 @@ fn xml_event(
         }
         XmlEvent::EndDocument => {
             log::debug!("EndDocument");
-            Ok(State::Happy)
+            Ok(State::End)
         }
-        XmlEvent::Whitespace(_) => Ok(State::Happy),
+        XmlEvent::Whitespace(content) => {
+            log::debug!("Whitespace [{content}]");
+            Ok(State::FoundContent(content.clone()))
+        },
         event => {
             log::warn!("Unmatched Event: {event:?}");
             Ok(State::Happy)
@@ -269,6 +287,7 @@ pub fn document(
                     stack.pop();
                 }
                 State::AttributesMissing | State::RelationshipMissing | State::Happy => {}
+                State::End => break
             },
             Err(error) => {
                 log::error!("Error: {error}");
