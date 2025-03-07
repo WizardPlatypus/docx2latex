@@ -1,1 +1,5 @@
 /target
+tarpaulin-report.html
+log.txt
+/example
+/output
