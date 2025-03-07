@@ -1,12 +1,11 @@
 use super::{Link, State};
 use std::{
     collections::HashMap,
-    fs::File,
     io::{BufWriter, Write},
 };
 
-pub fn hyperlink(
-    buf_writer: &mut BufWriter<File>,
+pub fn hyperlink<W: Write>(
+    buf_writer: &mut BufWriter<W>,
     rels: &HashMap<String, String>,
     hyperlink: (&Link, &String),
 ) -> std::io::Result<State> {
@@ -29,8 +28,8 @@ pub fn hyperlink(
     }
 }
 
-pub fn drawing(
-    buf_writer: &mut BufWriter<File>,
+pub fn drawing<W: Write>(
+    buf_writer: &mut BufWriter<W>,
     rels: &HashMap<String, String>,
     rel: &String,
 ) -> std::io::Result<State> {
@@ -49,5 +48,95 @@ pub fn drawing(
             rel
         );
         Ok(State::RelationshipMissing)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::io::Read;
+
+    #[test]
+    fn hyperlink_with_anchor_works() {
+        let mut buf_writer = super::BufWriter::new(Vec::new());
+        let rels = super::HashMap::new();
+        let link = super::Link::Anchor("Anchor".to_string());
+        let content = "Content".to_string();
+
+        let state = super::hyperlink(&mut buf_writer, &rels, (&link, &content));
+        assert!(state.is_ok());
+        let state = state.unwrap();
+        assert_eq!(state, super::State::Happy);
+
+        let mut written = String::new();
+        buf_writer.buffer().read_to_string(&mut written).unwrap();
+        assert_eq!(written, "\\hyperlink{Anchor}{Content}");
+    }
+
+    #[test]
+    fn hyperlink_with_present_relationship_works() {
+        let mut buf_writer = super::BufWriter::new(Vec::new());
+        let mut rels = super::HashMap::new();
+        rels.insert("TestKey".to_string(), "TestValue".to_string());
+        let link = super::Link::Relationship("TestKey".to_string());
+        let content = "Content".to_string();
+
+        let state = super::hyperlink(&mut buf_writer, &rels, (&link, &content));
+        assert!(state.is_ok());
+        let state = state.unwrap();
+        assert_eq!(state, super::State::Happy);
+
+
+        let mut written = String::new();
+        buf_writer.buffer().read_to_string(&mut written).unwrap();
+        assert_eq!(written, "\\href{TestValue}{Content}");
+    }
+
+    #[test]
+    fn hyperlink_recognizes_missing_relationship() {
+        let mut buf_writer = super::BufWriter::new(Vec::new());
+        let rels = super::HashMap::new();
+        let link = super::Link::Relationship("TestKey".to_string());
+        let content = "Content".to_string();
+
+        let state = super::hyperlink(&mut buf_writer, &rels, (&link, &content));
+        assert!(state.is_ok());
+        let state = state.unwrap();
+        assert_eq!(state, super::State::RelationshipMissing);
+
+
+        let mut written = String::new();
+        assert!(buf_writer.buffer().read_to_string(&mut written).is_ok());
+        assert_eq!(written, "Content");
+    }
+
+    #[test]
+    fn drawing_with_present_relationship_works() {
+        let mut buf_writer = super::BufWriter::new(Vec::new());
+        let mut rels = super::HashMap::new();
+        rels.insert("Key".to_string(), "value.test".to_string());
+
+        let state = super::drawing(&mut buf_writer, &rels, &"Key".to_string());
+        assert!(state.is_ok());
+        let state = state.unwrap();
+        assert_eq!(state, super::State::Happy);
+
+        let mut written = String::new();
+        buf_writer.buffer().read_to_string(&mut written).unwrap();
+        assert_eq!(written, "\\includegraphics[width=\\textwidth]{\"value\"}");
+    }
+
+    #[test]
+    fn drawing_recognizes_missing_relationship() {
+        let mut buf_writer = super::BufWriter::new(Vec::new());
+        let rels = super::HashMap::new();
+
+        let state = super::drawing(&mut buf_writer, &rels, &"Key".to_string());
+        assert!(state.is_ok());
+        let state = state.unwrap();
+        assert_eq!(state, super::State::RelationshipMissing);
+
+        let mut written = String::new();
+        assert!(buf_writer.buffer().read_to_string(&mut written).is_ok());
+        assert_eq!(written, "");
     }
 }

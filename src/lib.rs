@@ -69,6 +69,7 @@ pub fn relationships(
     Ok(rels)
 }
 
+#[derive(Debug, PartialEq)]
 enum State {
     OpenedTag(Tag),
     ClosedTag,
