@@ -85,6 +85,77 @@ impl Tag {
             None
         }
     }
+
+    pub fn to_owned(&self) -> Option<(super::OwnedName, Vec<super::OwnedAttribute>)> {
+        use Tag::*;
+
+        let ok = match &self {
+            AGraphic => (owned_name("a", "graphic"), vec![]),
+            AGraphicData => (owned_name("a", "graphicData"), vec![]),
+            PicPic => (owned_name("pic", "pic"), vec![]),
+            PicBlipFill => (owned_name("pic", "blipFill"), vec![]),
+            MoMathPara => (owned_name("m", "oMathPara"), vec![]),
+            MoMath => (owned_name("m", "oMath"), vec![]),
+            MDelim => (owned_name("m", "d"), vec![]),
+            MRad => (owned_name("m", "rad"), vec![]),
+            MDeg => (owned_name("m", "deg"), vec![]),
+            MRun => (owned_name("m", "r"), vec![]),
+            MText => (owned_name("m", "t"), vec![]),
+            MSub => (owned_name("m", "sub"), vec![]),
+            MSup => (owned_name("m", "sup"), vec![]),
+            MNary => (owned_name("m", "nary"), vec![]),
+            MNaryPr => (owned_name("m", "naryPr"), vec![]),
+            MFraction => (owned_name("m", "f"), vec![]),
+            MFunc => (owned_name("m", "func"), vec![]),
+            MFName => (owned_name("m", "fName"), vec![]),
+            MNum => (owned_name("m", "num"), vec![]),
+            MDen => (owned_name("m", "den"), vec![]),
+            WPInline => (owned_name("wp", "inline"), vec![]),
+            WPAnchor => (owned_name("wp", "anchor"), vec![]),
+            WBookmarkEnd => (owned_name("w", "bookmarkEnd"), vec![]),
+            WDrawing => (owned_name("w", "drawing"), vec![]),
+            WParagraph => (owned_name("w", "p"), vec![]),
+            WRun => (owned_name("w", "r"), vec![]),
+            WText => (owned_name("w", "t"), vec![]),
+            ABlip { rel } => (owned_name("a", "blip"), vec![owned_attr("r", "id", rel)]),
+            MChr { value } => (owned_name("m", "chr"), vec![owned_attr("m", "val", value)]),
+            WBookmarkStart { anchor } => (
+                owned_name("w", "bookmarkStart"),
+                vec![owned_attr("w", "anchor", anchor)],
+            ),
+            WHyperlink(link) => (
+                owned_name("w", "hyperlink"),
+                vec![match link {
+                    Link::Anchor(anchor) => owned_attr("w", "anchor", anchor),
+                    Link::Relationship(rel) => owned_attr("r", "id", rel),
+                }],
+            ),
+            Content(content) => (
+                owned_name("docx2latex", "content"),
+                vec![owned_attr("docx2latex", "characters", content)],
+            ),
+            Unknown { id } => (
+                owned_name("docx2latex", "unknown"),
+                vec![owned_attr("docx2latex", "id", id)],
+            ),
+        };
+        Some(ok)
+    }
+}
+
+pub fn owned_name(prefix: &str, local: &str) -> OwnedName {
+    OwnedName {
+        local_name: local.to_string(),
+        namespace: None,
+        prefix: Some(prefix.to_string()),
+    }
+}
+
+pub fn owned_attr(prefix: &str, local: &str, value: &str) -> OwnedAttribute {
+    OwnedAttribute {
+        name: owned_name(prefix, local),
+        value: value.to_string(),
+    }
 }
 
 impl TryFrom<(&OwnedName, &Vec<OwnedAttribute>)> for Tag {
@@ -195,6 +266,139 @@ mod test {
     use xml::{attribute::OwnedAttribute, name::OwnedName};
 
     use crate::tag::normalize;
+
+    #[test]
+    fn owned_name_works() {
+        let name = super::owned_name("prefix", "local");
+        assert!(name.prefix_ref().is_some());
+        assert_eq!(name.prefix_ref().unwrap(), "prefix");
+        assert_eq!(name.local_name, "local");
+    }
+
+    #[test]
+    fn owned_attr_works() {
+        let attr = super::owned_attr("prefix", "local", "value");
+        assert!(attr.name.prefix_ref().is_some());
+        assert_eq!(attr.name.prefix_ref().unwrap(), "prefix");
+        assert_eq!(attr.name.local_name, "local");
+        assert_eq!(attr.value, "value");
+    }
+
+    #[test]
+    fn to_owned_works() {
+        let expected = vec![
+            (super::owned_name("a", "graphic"), vec![]),
+            (super::owned_name("a", "graphicData"), vec![]),
+            (super::owned_name("pic", "pic"), vec![]),
+            (super::owned_name("pic", "blipFill"), vec![]),
+            (super::owned_name("m", "oMathPara"), vec![]),
+            (super::owned_name("m", "oMath"), vec![]),
+            (super::owned_name("m", "d"), vec![]),
+            (super::owned_name("m", "rad"), vec![]),
+            (super::owned_name("m", "deg"), vec![]),
+            (super::owned_name("m", "r"), vec![]),
+            (super::owned_name("m", "t"), vec![]),
+            (super::owned_name("m", "sub"), vec![]),
+            (super::owned_name("m", "sup"), vec![]),
+            (super::owned_name("m", "nary"), vec![]),
+            (super::owned_name("m", "naryPr"), vec![]),
+            (super::owned_name("m", "f"), vec![]),
+            (super::owned_name("m", "func"), vec![]),
+            (super::owned_name("m", "fName"), vec![]),
+            (super::owned_name("m", "num"), vec![]),
+            (super::owned_name("m", "den"), vec![]),
+            (super::owned_name("wp", "inline"), vec![]),
+            (super::owned_name("wp", "anchor"), vec![]),
+            (super::owned_name("w", "bookmarkEnd"), vec![]),
+            (super::owned_name("w", "drawing"), vec![]),
+            (super::owned_name("w", "p"), vec![]),
+            (super::owned_name("w", "r"), vec![]),
+            (super::owned_name("w", "t"), vec![]),
+            (
+                super::owned_name("a", "blip"),
+                vec![super::owned_attr("r", "id", "RelId")],
+            ),
+            (
+                super::owned_name("m", "chr"),
+                vec![super::owned_attr("m", "val", "X")],
+            ),
+            (
+                super::owned_name("w", "bookmarkStart"),
+                vec![super::owned_attr("w", "anchor", "Anchor")],
+            ),
+            (
+                super::owned_name("w", "hyperlink"),
+                vec![super::owned_attr("w", "anchor", "Anchor")],
+            ),
+            (
+                super::owned_name("w", "hyperlink"),
+                vec![super::owned_attr("r", "id", "RelId")],
+            ),
+        ];
+        use super::Tag::*;
+        let tags = vec![
+            AGraphic,
+            AGraphicData,
+            PicPic,
+            PicBlipFill,
+            MoMathPara,
+            MoMath,
+            MDelim,
+            MRad,
+            MDeg,
+            MRun,
+            MText,
+            MSub,
+            MSup,
+            MNary,
+            MNaryPr,
+            MFraction,
+            MFunc,
+            MFName,
+            MNum,
+            MDen,
+            WPInline,
+            WPAnchor,
+            WBookmarkEnd,
+            WDrawing,
+            WParagraph,
+            WRun,
+            WText,
+            ABlip {
+                rel: "RelId".to_string(),
+            },
+            MChr {
+                value: "X".to_string(),
+            },
+            WBookmarkStart {
+                anchor: "Anchor".to_string(),
+            },
+            WHyperlink(super::Link::Anchor("Anchor".to_string())),
+            WHyperlink(super::Link::Relationship("RelId".to_string())),
+        ];
+
+        assert_eq!(expected.len(), tags.len());
+        for i in 0..expected.len() {
+            let (e_name, e_attrs) = &expected[i];
+            let owned = tags[i].to_owned();
+
+            assert!(owned.is_some());
+            let (a_name, a_attrs) = owned.unwrap();
+
+            assert_eq!(e_name.local_name, a_name.local_name);
+            assert_eq!(e_name.prefix, a_name.prefix);
+
+            assert_eq!(e_attrs.len(), a_attrs.len());
+            for j in 0..e_attrs.len() {
+                let e_attr = &e_attrs[j];
+                let a_attr = &a_attrs[j];
+
+                assert_eq!(e_attr.name.local_name, a_attr.name.local_name);
+                assert_eq!(e_attr.name.prefix, a_attr.name.prefix);
+                assert_eq!(e_attr.value, a_attr.value);
+            }
+        }
+    }
 
     #[test]
     fn normalize_works_with_prefix() {
@@ -358,34 +562,34 @@ mod test {
     #[test]
     fn converts_empty_tags() {
         use super::Tag::*;
-        let raw = vec![
-            "a:graphic",
-            "a:graphicData",
-            "pic:pic",
-            "pic:blipFill",
-            "m:oMathPara",
-            "m:oMath",
-            "m:d",
-            "m:rad",
-            "m:deg",
-            "m:r",
-            "m:t",
-            "m:sub",
-            "m:sup",
-            "m:nary",
-            "m:naryPr",
-            "m:f",
-            "m:func",
-            "m:fName",
-            "m:num",
-            "m:den",
-            "wp:inline",
-            "wp:anchor",
-            "w:bookmarkEnd",
-            "w:drawing",
-            "w:p",
-            "w:r",
-            "w:t",
+        let owned_names = vec![
+            super::owned_name("a", "graphic"),
+            super::owned_name("a", "graphicData"),
+            super::owned_name("pic", "pic"),
+            super::owned_name("pic", "blipFill"),
+            super::owned_name("m", "oMathPara"),
+            super::owned_name("m", "oMath"),
+            super::owned_name("m", "d"),
+            super::owned_name("m", "rad"),
+            super::owned_name("m", "deg"),
+            super::owned_name("m", "r"),
+            super::owned_name("m", "t"),
+            super::owned_name("m", "sub"),
+            super::owned_name("m", "sup"),
+            super::owned_name("m", "nary"),
+            super::owned_name("m", "naryPr"),
+            super::owned_name("m", "f"),
+            super::owned_name("m", "func"),
+            super::owned_name("m", "fName"),
+            super::owned_name("m", "num"),
+            super::owned_name("m", "den"),
+            super::owned_name("wp", "inline"),
+            super::owned_name("wp", "anchor"),
+            super::owned_name("w", "bookmarkEnd"),
+            super::owned_name("w", "drawing"),
+            super::owned_name("w", "p"),
+            super::owned_name("w", "r"),
+            super::owned_name("w", "t"),
         ];
         let expected = vec![
             AGraphic,
@@ -416,11 +620,11 @@ mod test {
             WRun,
             WText,
         ];
-        assert_eq!(raw.len(), expected.len());
-        for i in 0..raw.len() {
-            let name = owned(raw[i]);
+        assert_eq!(owned_names.len(), expected.len());
+        for i in 0..owned_names.len() {
+            let name = &owned_names[i];
             let actual =
-                super::Tag::try_from((&name, &vec![])).expect("Input was constructed manually");
+                super::Tag::try_from((name, &vec![])).expect("Input was constructed manually");
             assert_eq!(actual, expected[i]);
         }
     }
