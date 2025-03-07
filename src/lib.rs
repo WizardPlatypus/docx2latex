@@ -334,3 +334,18 @@ fn escape(raw: &str, math_mode: &bool) -> String {
     }
     buf
 }
+
+#[cfg(test)]
+mod test {
+    #[test]
+    fn blink_true_is_some() {
+        let actual = super::blink(true);
+        assert!(actual.is_some());
+    }
+
+    #[test]
+    fn blink_false_is_none() {
+        let actual = super::blink(false);
+        assert!(actual.is_none());
+    }
+}
