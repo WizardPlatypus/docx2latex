@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     fs::File,
-    io::{BufReader, BufWriter, Write},
+    io::{BufReader, Read, BufWriter, Write},
 };
 
 use xml::{
@@ -26,8 +26,8 @@ fn blink(value: bool) -> Option<()> {
     }
 }
 
-pub fn relationships(
-    parser: &mut EventReader<std::io::BufReader<std::fs::File>>,
+pub fn relationships<R: Read>(
+    parser: &mut EventReader<BufReader<R>>,
 ) -> Result<HashMap<String, String>, xml::reader::Error> {
     let mut count = 0;
     let mut rels = HashMap::<String, String>::default();
@@ -299,7 +299,6 @@ pub fn document(
     Ok(())
 }
 
-// TODO: unit test candidate
 fn escape(raw: &str, math_mode: &bool) -> String {
     let mut buf = String::new();
     for c in raw.chars() {
@@ -311,14 +310,14 @@ fn escape(raw: &str, math_mode: &bool) -> String {
                 if *math_mode {
                     buf.push('<');
                 } else {
-                    buf.push_str("\\textless");
+                    buf.push_str("\\textless ");
                 }
             }
             '>' => {
                 if *math_mode {
                     buf.push('>');
                 } else {
-                    buf.push_str("\\textgreater");
+                    buf.push_str("\\textgreater ");
                 }
             }
             '%' => buf.push_str("\\% "),
@@ -327,9 +326,9 @@ fn escape(raw: &str, math_mode: &bool) -> String {
             '#' => buf.push_str("\\# "),
             '}' => buf.push_str("\\} "),
             '~' => buf.push_str("\\~{} "),
-            '_' => buf.push_str("\\_"),
-            '±' => buf.push_str("\\pm"),
-            '∓' => buf.push_str("\\mp"),
+            '_' => buf.push_str("\\_ "),
+            '±' => buf.push_str("\\pm "),
+            '∓' => buf.push_str("\\mp "),
             c => buf.push(c),
         }
     }
@@ -348,5 +347,64 @@ mod test {
     fn blink_false_is_none() {
         let actual = super::blink(false);
         assert!(actual.is_none());
+    }
+
+    #[test]
+    fn unconditional_escape_works() {
+        let input = "∞π&%${#}~_±∓ abrakadabra";
+        let actual = super::escape(input, &false);
+        let expected = "\\infty \\pi \\& \\% \\$ \\{ \\# \\} \\~{} \\_ \\pm \\mp  abrakadabra";
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn escape_recognizes_math_mode() {
+        let input = "<>";
+        let on = "<>";
+        let off = "\\textless \\textgreater ";
+        assert_eq!(super::escape(input, &true), on);
+        assert_eq!(super::escape(input, &false), off);
+    }
+
+    #[test]
+    fn relationships_recognizes_missing_attributes() {
+        let raw = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships>
+    <Relationship Id="rId1" Target="styles.xml"/>
+    <Relationship Id="rId2" Target="https://www.lipsum.com/"/>
+    <Relationship           Target="settings.xml"/>
+    <Relationship Id="rId3"/>
+    <Relationship/>
+    <Junk/>
+</Relationships>
+"#;
+        let mut parser = xml::EventReader::new(std::io::BufReader::new(raw.as_bytes()));
+        let rels = super::relationships(&mut parser);
+        assert!(rels.is_ok());
+        let rels = rels.unwrap();
+        assert_eq!(rels.len(), 2);
+
+        assert!(rels.contains_key("rId1"));
+        assert_eq!(rels.get("rId1").unwrap(), "styles.xml");
+
+        assert!(rels.contains_key("rId2"));
+        assert_eq!(rels.get("rId2").unwrap(), "https://www.lipsum.com/");
+    }
+
+    #[test]
+    fn relationships_recognizes_xml_error() {
+        let raw = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+Relationships>
+    <Relationship Id="rId1" Target="styles.xml"/>
+    <Relationship Id="rId2" Target="https://www.lipsum.com/"/>
+    <Relationship           Target="settings.xml"/>
+    <Relationship Id="rId3"/>
+    <Relationship/>
+    <Junk/>
+</Relationships>
+"#;
+        let mut parser = xml::EventReader::new(std::io::BufReader::new(raw.as_bytes()));
+        let rels = super::relationships(&mut parser);
+        assert!(rels.is_err());
     }
 }
