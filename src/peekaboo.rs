@@ -7,15 +7,6 @@ pub struct Boo<T> {
 }
 
 impl<T> Boo<T> {
-    pub fn top(&self) -> Option<&T> {
-        let peeked = self.peeked.get();
-        if peeked >= self.len() {
-            None
-        } else {
-            self.vec.get(self.vec.len() - peeked - 1)
-        }
-    }
-
     pub fn peek(&self) -> Option<&T> {
         let peeked = self.peeked.get();
         self.peeked.set(peeked + 1);
@@ -119,23 +110,6 @@ mod test {
     }
 
     #[test]
-    fn top_relies_on_peeked() {
-        let boo = super::Boo::from(vec![0, 1, 2, 3, 4]);
-
-        assert_eq!(boo.peek(), Some(&4));
-        assert_eq!(boo.peeked.get(), 1);
-
-        assert_eq!(boo.top(), Some(&3));
-        assert_eq!(boo.peeked.get(), 1);
-
-        assert_eq!(boo.peek(), Some(&3));
-        assert_eq!(boo.peeked.get(), 2);
-
-        assert_eq!(boo.top(), Some(&2));
-        assert_eq!(boo.peeked.get(), 2);
-    }
-
-    #[test]
     fn peek_exhausts_boo() {
         let boo = super::Boo::from(vec![0, 1, 2]);
 
@@ -162,19 +136,10 @@ mod test {
     fn reset_works() {
         let boo = super::Boo::from(vec![0]);
 
-        assert_eq!(boo.top(), Some(&0));
-        assert_eq!(boo.peeked.get(), 0);
-
         assert_eq!(boo.peek(), Some(&0));
         assert_eq!(boo.peeked.get(), 1);
 
-        assert_eq!(boo.top(), None);
-        assert_eq!(boo.peeked.get(), 1);
-
         boo.reset();
-
-        assert_eq!(boo.top(), Some(&0));
-        assert_eq!(boo.peeked.get(), 0);
 
         assert_eq!(boo.peek(), Some(&0));
         assert_eq!(boo.peeked.get(), 1);
