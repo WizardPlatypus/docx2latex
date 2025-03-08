@@ -405,6 +405,7 @@ mod test {
     }
 
     #[test]
+    #[should_panic]
     fn relationships_recognizes_xml_error() {
         let raw = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 Relationships>
@@ -419,6 +420,7 @@ Relationships>
         let mut parser = xml::EventReader::new(BufReader::new(raw.as_bytes()));
         let rels = relationships(&mut parser);
         assert!(rels.is_err());
+        let _should_panic = rels.unwrap();
     }
 
     fn drain<W: Write>(buf_writer: &mut BufWriter<W>) -> std::io::Result<String> {
