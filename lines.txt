@@ -1,0 +1,15 @@
+  142 ./src/latex.rs
+ 1052 ./src/lib.rs
+  113 ./src/main.rs
+  206 ./src/ooxml.rs
+  181 ./src/peekaboo.rs
+  799 ./src/tag.rs
+ 2493 total
+
+   53 ./src/latex.rs
+  336 ./src/lib.rs
+  113 ./src/main.rs
+   38 ./src/ooxml.rs
+   67 ./src/peekaboo.rs
+  192 ./src/tag.rs
+  799 total
