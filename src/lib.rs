@@ -342,6 +342,8 @@ mod test {
         io::{BufReader, BufWriter, Read, Write},
     };
 
+    use rstest::rstest;
+
     use super::{
         blink, end_element, escape,
         peekaboo::Boo,
@@ -608,81 +610,64 @@ Relationships>
         assert_eq!(drain(&mut buf_writer).unwrap(), "");
     }
 
-    #[test]
-    #[allow(unused_assignments)]
-    fn start_element_recognizes_mchr() {
+    #[rstest]
+    #[case("⋀", "\\bigwedge")]
+    #[case("⋁", "\\bigvee")]
+    #[case("⋂", "\\bigcap")]
+    #[case("⋃", "\\bigcup")]
+    #[case("∐", "\\coprod")]
+    #[case("∏", "\\prod")]
+    #[case("∑", "\\sum")]
+    #[case("∮", "\\oint")]
+    fn very_long_test_name(#[case] input: &str, #[case] output: &str) {
         let Fixture {
             mut buf_writer,
             rels: _,
             stack: _,
             mut math_mode,
-            mut nary_has_chr,
+            nary_has_chr: _,
         } = Fixture::default();
+        let mut nary_has_chr = Some(false);
 
         let name = owned_name("m", "chr");
+        let attr = vec![owned_attr("m", "val", input)];
+        let mchr = Tag::MChr {
+            value: input.to_string(),
+        };
 
-        let input = ["⋀", "⋁", "⋂", "⋃", "∐", "∏", "∑", "∮"];
-        let output = [
-            "\\bigwedge",
-            "\\bigvee",
-            "\\bigcap",
-            "\\bigcup",
-            "\\coprod",
-            "\\prod",
-            "\\sum",
-            "\\oint",
-        ];
+        let state = start_element(
+            &mut buf_writer,
+            &name,
+            &attr,
+            &mut math_mode,
+            &mut nary_has_chr,
+        );
 
-        assert_eq!(input.len(), output.len());
-        for i in 0..input.len() {
-            let attr = vec![owned_attr("m", "val", input[i])];
-
-            nary_has_chr = Some(false);
-
-            let state = start_element(
-                &mut buf_writer,
-                &name,
-                &attr,
-                &mut math_mode,
-                &mut nary_has_chr,
-            );
-
-            assert!(state.is_ok());
-            let state = state.unwrap();
-            assert!(matches!(state, State::OpenedTag(Tag::MChr { value: _ })));
-            if let State::OpenedTag(tag) = state {
-                assert_eq!(
-                    tag,
-                    Tag::MChr {
-                        value: input[i].to_string()
-                    }
-                );
-            }
-            assert_eq!(nary_has_chr, Some(true));
-            assert_eq!(drain(&mut buf_writer).unwrap(), output[i]);
-
-            let state = start_element(
-                &mut buf_writer,
-                &name,
-                &attr,
-                &mut math_mode,
-                &mut nary_has_chr,
-            );
-
-            assert!(state.is_ok());
-            let state = state.unwrap();
-            assert!(matches!(state, State::OpenedTag(Tag::MChr { value: _ })));
-            if let State::OpenedTag(tag) = state {
-                assert_eq!(
-                    tag,
-                    Tag::MChr {
-                        value: input[i].to_string()
-                    }
-                );
-            }
-            assert_eq!(nary_has_chr, Some(true));
-            assert_eq!(drain(&mut buf_writer).unwrap(), output[i]);
+        assert!(state.is_ok());
+        let state = state.unwrap();
+        assert!(matches!(state, State::OpenedTag(Tag::MChr { value: _ })));
+        if let State::OpenedTag(tag) = state {
+            assert_eq!(tag, mchr);
         }
+        assert_eq!(drain(&mut buf_writer).unwrap(), output);
+        assert_eq!(nary_has_chr, Some(true));
+
+        let state = start_element(
+            &mut buf_writer,
+            &name,
+            &attr,
+            &mut math_mode,
+            &mut nary_has_chr,
+        );
+
+        assert!(state.is_ok());
+        let state = state.unwrap();
+        assert!(matches!(state, State::OpenedTag(Tag::MChr { value: _ })));
+        if let State::OpenedTag(tag) = state {
+            assert_eq!(tag, mchr);
+        }
+        assert_eq!(nary_has_chr, Some(true));
+        assert_eq!(drain(&mut buf_writer).unwrap(), output);
     }
 
     #[test]
