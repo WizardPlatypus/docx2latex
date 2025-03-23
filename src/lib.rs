@@ -452,45 +452,40 @@ Relationships>
         }
     }
 
-    #[test]
-    fn start_element_works_with_simple_tags() {
-        use Tag::*;
-        let input = vec![
-            // MoMathPara,
-            MDelim, MRad, MDeg, MSub, MSup,
-            // MNaryPr,
-            // MChr { value: "X".to_string() },
-            MFraction, MNum, MDen,
-        ];
-        let output = ["(", "\\sqrt", "[", "_{", "^{", "\\frac", "{", "{"];
+    #[rstest]
+    #[case(Tag::MDelim, "(")]
+    #[case(Tag::MRad, "\\sqrt")]
+    #[case(Tag::MDeg, "[")]
+    #[case(Tag::MSub, "_{")]
+    #[case(Tag::MSup, "^{")]
+    #[case(Tag::MFraction, "\\frac")]
+    #[case(Tag::MNum, "{")]
+    #[case(Tag::MDen, "{")]
+    fn start_element_works_with_simple_tags(#[case] input: Tag, #[case] output: &'static str) {
+        let Fixture {
+            mut buf_writer,
+            rels: _,
+            stack: _,
+            mut math_mode,
+            mut nary_has_chr,
+        } = Fixture::default();
 
-        assert_eq!(input.len(), output.len());
-        for i in 0..input.len() {
-            let Fixture {
-                mut buf_writer,
-                rels: _,
-                stack: _,
-                mut math_mode,
-                mut nary_has_chr,
-            } = Fixture::default();
-
-            let (name, attributes) = input[i].to_owned().unwrap();
-            let state = start_element(
-                &mut buf_writer,
-                &name,
-                &attributes,
-                &mut math_mode,
-                &mut nary_has_chr,
-            );
-            assert!(state.is_ok());
-            let state = state.unwrap();
-            assert!(matches!(state, State::OpenedTag(_)));
-            if let State::OpenedTag(tag) = state {
-                assert_eq!(tag, input[i]);
-            }
-
-            assert_eq!(drain(&mut buf_writer).unwrap(), output[i]);
+        let (name, attributes) = input.to_owned().unwrap();
+        let state = start_element(
+            &mut buf_writer,
+            &name,
+            &attributes,
+            &mut math_mode,
+            &mut nary_has_chr,
+        );
+        assert!(state.is_ok());
+        let state = state.unwrap();
+        assert!(matches!(state, State::OpenedTag(_)));
+        if let State::OpenedTag(tag) = state {
+            assert_eq!(tag, input);
         }
+
+        assert_eq!(drain(&mut buf_writer).unwrap(), output);
     }
 
     #[test]
