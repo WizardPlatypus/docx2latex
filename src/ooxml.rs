@@ -1,3 +1,4 @@
+use crate::peekaboo::Peek;
 use super::{blink, Boo, Link, Tag};
 
 pub fn hyperlink(boo: &Boo<Tag>) -> Option<(&Link, &String)> {
@@ -40,167 +41,168 @@ pub fn math_text(boo: &Boo<Tag>) -> Option<&String> {
 
 #[cfg(test)]
 mod test {
+    use super::*;
     #[test]
     fn hyperlink_works() {
-        let mut boo = super::Boo::default();
-        assert!(super::hyperlink(&boo).is_none());
+        let mut boo = Boo::default();
+        assert!(hyperlink(&boo).is_none());
 
-        boo.push(super::Tag::WHyperlink(super::Link::Anchor(
+        boo.push(Tag::WHyperlink(Link::Anchor(
             "Anchor".to_string(),
         )));
-        assert!(super::hyperlink(&boo).is_none());
+        assert!(hyperlink(&boo).is_none());
 
-        boo.push(super::Tag::WRun);
-        assert!(super::hyperlink(&boo).is_none());
+        boo.push(Tag::WRun);
+        assert!(hyperlink(&boo).is_none());
 
-        boo.push(super::Tag::Content("Content".to_string()));
-        assert!(super::hyperlink(&boo).is_none());
+        boo.push(Tag::Content("Content".to_string()));
+        assert!(hyperlink(&boo).is_none());
 
         boo.pop();
-        boo.push(super::Tag::WText);
-        assert!(super::hyperlink(&boo).is_none());
+        boo.push(Tag::WText);
+        assert!(hyperlink(&boo).is_none());
 
-        boo.push(super::Tag::Content("Content".to_string()));
-        assert!(super::hyperlink(&boo).is_some());
+        boo.push(Tag::Content("Content".to_string()));
+        assert!(hyperlink(&boo).is_some());
 
         boo.reset();
-        assert!(super::hyperlink(&boo).is_some());
+        assert!(hyperlink(&boo).is_some());
 
-        let (link, content) = super::hyperlink(&boo).unwrap();
-        assert_eq!(link, &super::Link::Anchor("Anchor".to_string()));
+        let (link, content) = hyperlink(&boo).unwrap();
+        assert_eq!(link, &Link::Anchor("Anchor".to_string()));
         assert_eq!(content, "Content");
     }
 
     #[test]
     fn drawing_works() {
-        let mut boo = super::Boo::default();
-        assert!(super::drawing(&boo).is_none());
+        let mut boo = Boo::default();
+        assert!(drawing(&boo).is_none());
 
-        boo.push(super::Tag::WDrawing);
-        assert!(super::drawing(&boo).is_none());
+        boo.push(Tag::WDrawing);
+        assert!(drawing(&boo).is_none());
 
-        boo.push(super::Tag::WDrawing);
-        assert!(super::drawing(&boo).is_none());
+        boo.push(Tag::WDrawing);
+        assert!(drawing(&boo).is_none());
 
-        boo.push(super::Tag::WPInline);
-        assert!(super::drawing(&boo).is_none());
+        boo.push(Tag::WPInline);
+        assert!(drawing(&boo).is_none());
 
-        boo.push(super::Tag::AGraphic);
-        assert!(super::drawing(&boo).is_none());
+        boo.push(Tag::AGraphic);
+        assert!(drawing(&boo).is_none());
 
-        boo.push(super::Tag::AGraphicData);
-        assert!(super::drawing(&boo).is_none());
+        boo.push(Tag::AGraphicData);
+        assert!(drawing(&boo).is_none());
 
-        boo.push(super::Tag::PicPic);
-        assert!(super::drawing(&boo).is_none());
+        boo.push(Tag::PicPic);
+        assert!(drawing(&boo).is_none());
 
-        boo.push(super::Tag::PicBlipFill);
-        assert!(super::drawing(&boo).is_none());
+        boo.push(Tag::PicBlipFill);
+        assert!(drawing(&boo).is_none());
 
-        boo.push(super::Tag::ABlip {
+        boo.push(Tag::ABlip {
             rel: "RelId".to_string(),
         });
-        assert!(super::drawing(&boo).is_some());
+        assert!(drawing(&boo).is_some());
 
         boo.reset();
-        assert!(super::drawing(&boo).is_some());
+        assert!(drawing(&boo).is_some());
 
-        let rel = super::drawing(&boo).unwrap();
+        let rel = drawing(&boo).unwrap();
         assert_eq!(rel, "RelId");
 
         boo.pop();
-        assert!(super::drawing(&boo).is_none());
+        assert!(drawing(&boo).is_none());
         boo.pop();
-        assert!(super::drawing(&boo).is_none());
+        assert!(drawing(&boo).is_none());
         boo.pop();
-        assert!(super::drawing(&boo).is_none());
+        assert!(drawing(&boo).is_none());
         boo.pop();
-        assert!(super::drawing(&boo).is_none());
+        assert!(drawing(&boo).is_none());
         boo.pop();
-        assert!(super::drawing(&boo).is_none());
+        assert!(drawing(&boo).is_none());
         boo.pop();
-        assert!(super::drawing(&boo).is_none());
+        assert!(drawing(&boo).is_none());
 
-        boo.push(super::Tag::WPAnchor);
-        assert!(super::drawing(&boo).is_none());
+        boo.push(Tag::WPAnchor);
+        assert!(drawing(&boo).is_none());
 
-        boo.push(super::Tag::AGraphic);
-        assert!(super::drawing(&boo).is_none());
+        boo.push(Tag::AGraphic);
+        assert!(drawing(&boo).is_none());
 
-        boo.push(super::Tag::AGraphicData);
-        assert!(super::drawing(&boo).is_none());
+        boo.push(Tag::AGraphicData);
+        assert!(drawing(&boo).is_none());
 
-        boo.push(super::Tag::PicPic);
-        assert!(super::drawing(&boo).is_none());
+        boo.push(Tag::PicPic);
+        assert!(drawing(&boo).is_none());
 
-        boo.push(super::Tag::ABlip {
+        boo.push(Tag::ABlip {
             rel: "RelId".to_string(),
         });
-        assert!(super::drawing(&boo).is_none());
+        assert!(drawing(&boo).is_none());
 
         boo.pop();
-        boo.push(super::Tag::PicBlipFill);
-        assert!(super::drawing(&boo).is_none());
+        boo.push(Tag::PicBlipFill);
+        assert!(drawing(&boo).is_none());
 
-        boo.push(super::Tag::ABlip {
+        boo.push(Tag::ABlip {
             rel: "RelId".to_string(),
         });
-        assert!(super::drawing(&boo).is_some());
+        assert!(drawing(&boo).is_some());
 
         boo.reset();
-        assert!(super::drawing(&boo).is_some());
+        assert!(drawing(&boo).is_some());
 
-        let rel = super::drawing(&boo).unwrap();
+        let rel = drawing(&boo).unwrap();
         assert_eq!(rel, "RelId");
     }
 
     #[test]
     fn word_text_works() {
-        let mut boo = super::Boo::default();
-        assert!(super::word_text(&boo).is_none());
+        let mut boo = Boo::default();
+        assert!(word_text(&boo).is_none());
 
-        boo.push(super::Tag::WRun);
-        assert!(super::word_text(&boo).is_none());
+        boo.push(Tag::WRun);
+        assert!(word_text(&boo).is_none());
 
-        boo.push(super::Tag::Content("Content".to_string()));
-        assert!(super::word_text(&boo).is_none());
+        boo.push(Tag::Content("Content".to_string()));
+        assert!(word_text(&boo).is_none());
 
         boo.pop();
-        boo.push(super::Tag::WText);
-        assert!(super::word_text(&boo).is_none());
+        boo.push(Tag::WText);
+        assert!(word_text(&boo).is_none());
 
-        boo.push(super::Tag::Content("Content".to_string()));
-        assert!(super::word_text(&boo).is_some());
+        boo.push(Tag::Content("Content".to_string()));
+        assert!(word_text(&boo).is_some());
 
         boo.reset();
-        assert!(super::word_text(&boo).is_some());
+        assert!(word_text(&boo).is_some());
 
-        let content = super::word_text(&boo).unwrap();
+        let content = word_text(&boo).unwrap();
         assert_eq!(content, "Content");
     }
 
     #[test]
     fn math_text_works() {
-        let mut boo = super::Boo::default();
-        assert!(super::math_text(&boo).is_none());
+        let mut boo = Boo::default();
+        assert!(math_text(&boo).is_none());
 
-        boo.push(super::Tag::MRun);
-        assert!(super::math_text(&boo).is_none());
+        boo.push(Tag::MRun);
+        assert!(math_text(&boo).is_none());
 
-        boo.push(super::Tag::Content("Content".to_string()));
-        assert!(super::math_text(&boo).is_none());
+        boo.push(Tag::Content("Content".to_string()));
+        assert!(math_text(&boo).is_none());
 
         boo.pop();
-        boo.push(super::Tag::MText);
-        assert!(super::math_text(&boo).is_none());
+        boo.push(Tag::MText);
+        assert!(math_text(&boo).is_none());
 
-        boo.push(super::Tag::Content("Content".to_string()));
-        assert!(super::math_text(&boo).is_some());
+        boo.push(Tag::Content("Content".to_string()));
+        assert!(math_text(&boo).is_some());
 
         boo.reset();
-        assert!(super::math_text(&boo).is_some());
+        assert!(math_text(&boo).is_some());
 
-        let content = super::math_text(&boo).unwrap();
+        let content = math_text(&boo).unwrap();
         assert_eq!(content, "Content");
     }
 }

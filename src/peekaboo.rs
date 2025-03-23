@@ -6,19 +6,48 @@ pub struct Boo<T> {
     peeked: Cell<usize>
 }
 
-impl<T> Boo<T> {
-    pub fn peek(&self) -> Option<&T> {
-        let peeked = self.peeked.get();
-        self.peeked.set(peeked + 1);
+pub trait Peek {
+    type Item;
+
+    // required
+    fn peeked(&self) -> usize;
+    fn incr(&self);
+    fn reset(&self);
+    fn len(&self) -> usize;
+    fn get(&self, index: usize) -> Option<&Self::Item>;
+    // provided
+    fn peek(&self) -> Option<&Self::Item> {
+        let peeked = self.peeked();
+        self.incr();
         if peeked >= self.len() {
             None
         } else {
-            self.vec.get(self.vec.len() - peeked - 1)
+            self.get(self.len() - peeked - 1)
         }
     }
+}
 
-    pub fn reset(&self) {
+impl<T> Peek for Boo<T> {
+    type Item = T;
+
+    fn peeked(&self) -> usize {
+        self.peeked.get()
+    }
+
+    fn incr(&self) {
+        self.peeked.set(self.peeked() + 1);
+    }
+
+    fn reset(&self) {
         self.peeked.set(0);
+    }
+
+    fn len(&self) -> usize {
+        self.vec.len()
+    }
+
+    fn get(&self, index: usize) -> Option<&Self::Item> {
+        self.vec.get(index)
     }
 }
 
@@ -56,16 +85,18 @@ impl<T: Debug> Debug for Boo<T> {
 
 #[cfg(test)]
 mod test {
+    use super::*;
+
     #[test]
     fn default_is_empty() {
-        let boo: super::Boo<usize> = super::Boo::default();
+        let boo: Boo<usize> = Boo::default();
         assert_eq!(boo.vec.len(), 0);
         assert_eq!(boo.peeked.get(), 0)
     }
 
     #[test]
     fn deref_works() {
-        let mut boo = super::Boo::default();
+        let mut boo = Boo::default();
         assert!(boo.is_empty());
         boo.push(1);
         boo.push(2);
@@ -80,7 +111,7 @@ mod test {
         let box_3 = Box::new(3);
 
         let vec = vec![box_1, box_2, box_3];
-        let boo = super::Boo::from(vec.clone());
+        let boo = Boo::from(vec.clone());
 
         for i in 0..2 {
             assert_eq!(vec[i], boo[i]);
@@ -90,14 +121,14 @@ mod test {
     #[test]
     fn debug_is_equivalent() {
         let vec = vec![1, 2, 3];
-        let boo = super::Boo::from(vec.clone());
+        let boo = Boo::from(vec.clone());
 
         assert_eq!(format!("{vec:?}"), format!("{boo:?}"));
     }
 
     #[test]
     fn peek_persists() {
-        let boo = super::Boo::from(vec![0, 1, 2, 3, 4]);
+        let boo = Boo::from(vec![0, 1, 2, 3, 4]);
 
         assert_eq!(boo.peek(), Some(&4));
         assert_eq!(boo.peeked.get(), 1);
@@ -111,7 +142,7 @@ mod test {
 
     #[test]
     fn peek_exhausts_boo() {
-        let boo = super::Boo::from(vec![0, 1, 2]);
+        let boo = Boo::from(vec![0, 1, 2]);
 
         assert_eq!(boo.peek(), Some(&2));
         assert_eq!(boo.peeked.get(), 1);
@@ -134,7 +165,7 @@ mod test {
 
     #[test]
     fn reset_works() {
-        let boo = super::Boo::from(vec![0]);
+        let boo = Boo::from(vec![0]);
 
         assert_eq!(boo.peek(), Some(&0));
         assert_eq!(boo.peeked.get(), 1);
