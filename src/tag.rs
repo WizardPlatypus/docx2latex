@@ -86,7 +86,8 @@ impl Tag {
         }
     }
 
-    pub fn to_owned(&self) -> Option<(super::OwnedName, Vec<super::OwnedAttribute>)> {
+    #[allow(dead_code)]
+    pub fn to_owned(&self) -> Option<(OwnedName, Vec<OwnedAttribute>)> {
         use Tag::*;
 
         let ok = match &self {
@@ -143,6 +144,7 @@ impl Tag {
     }
 }
 
+#[allow(dead_code)]
 pub fn owned_name(prefix: &str, local: &str) -> OwnedName {
     OwnedName {
         local_name: local.to_string(),
@@ -151,6 +153,7 @@ pub fn owned_name(prefix: &str, local: &str) -> OwnedName {
     }
 }
 
+#[allow(dead_code)]
 pub fn owned_attr(prefix: &str, local: &str, value: &str) -> OwnedAttribute {
     OwnedAttribute {
         name: owned_name(prefix, local),
@@ -263,13 +266,14 @@ pub fn normalize(raw: &OwnedName) -> String {
 
 #[cfg(test)]
 mod test {
+    use rstest::rstest;
     use xml::{attribute::OwnedAttribute, name::OwnedName};
 
-    use crate::tag::normalize;
+    use super::*;
 
     #[test]
     fn owned_name_works() {
-        let name = super::owned_name("prefix", "local");
+        let name = owned_name("prefix", "local");
         assert!(name.prefix_ref().is_some());
         assert_eq!(name.prefix_ref().unwrap(), "prefix");
         assert_eq!(name.local_name, "local");
@@ -277,126 +281,64 @@ mod test {
 
     #[test]
     fn owned_attr_works() {
-        let attr = super::owned_attr("prefix", "local", "value");
+        let attr = owned_attr("prefix", "local", "value");
         assert!(attr.name.prefix_ref().is_some());
         assert_eq!(attr.name.prefix_ref().unwrap(), "prefix");
         assert_eq!(attr.name.local_name, "local");
         assert_eq!(attr.value, "value");
     }
 
-    #[test]
-    fn to_owned_works() {
-        let expected = vec![
-            (super::owned_name("a", "graphic"), vec![]),
-            (super::owned_name("a", "graphicData"), vec![]),
-            (super::owned_name("pic", "pic"), vec![]),
-            (super::owned_name("pic", "blipFill"), vec![]),
-            (super::owned_name("m", "oMathPara"), vec![]),
-            (super::owned_name("m", "oMath"), vec![]),
-            (super::owned_name("m", "d"), vec![]),
-            (super::owned_name("m", "rad"), vec![]),
-            (super::owned_name("m", "deg"), vec![]),
-            (super::owned_name("m", "r"), vec![]),
-            (super::owned_name("m", "t"), vec![]),
-            (super::owned_name("m", "sub"), vec![]),
-            (super::owned_name("m", "sup"), vec![]),
-            (super::owned_name("m", "nary"), vec![]),
-            (super::owned_name("m", "naryPr"), vec![]),
-            (super::owned_name("m", "f"), vec![]),
-            (super::owned_name("m", "func"), vec![]),
-            (super::owned_name("m", "fName"), vec![]),
-            (super::owned_name("m", "num"), vec![]),
-            (super::owned_name("m", "den"), vec![]),
-            (super::owned_name("wp", "inline"), vec![]),
-            (super::owned_name("wp", "anchor"), vec![]),
-            (super::owned_name("w", "bookmarkEnd"), vec![]),
-            (super::owned_name("w", "drawing"), vec![]),
-            (super::owned_name("w", "p"), vec![]),
-            (super::owned_name("w", "r"), vec![]),
-            (super::owned_name("w", "t"), vec![]),
-            (
-                super::owned_name("a", "blip"),
-                vec![super::owned_attr("r", "id", "RelId")],
-            ),
-            (
-                super::owned_name("m", "chr"),
-                vec![super::owned_attr("m", "val", "X")],
-            ),
-            (
-                super::owned_name("w", "bookmarkStart"),
-                vec![super::owned_attr("w", "anchor", "Anchor")],
-            ),
-            (
-                super::owned_name("w", "hyperlink"),
-                vec![super::owned_attr("w", "anchor", "Anchor")],
-            ),
-            (
-                super::owned_name("w", "hyperlink"),
-                vec![super::owned_attr("r", "id", "RelId")],
-            ),
-        ];
-        use super::Tag::*;
-        let tags = vec![
-            AGraphic,
-            AGraphicData,
-            PicPic,
-            PicBlipFill,
-            MoMathPara,
-            MoMath,
-            MDelim,
-            MRad,
-            MDeg,
-            MRun,
-            MText,
-            MSub,
-            MSup,
-            MNary,
-            MNaryPr,
-            MFraction,
-            MFunc,
-            MFName,
-            MNum,
-            MDen,
-            WPInline,
-            WPAnchor,
-            WBookmarkEnd,
-            WDrawing,
-            WParagraph,
-            WRun,
-            WText,
-            ABlip {
-                rel: "RelId".to_string(),
-            },
-            MChr {
-                value: "X".to_string(),
-            },
-            WBookmarkStart {
-                anchor: "Anchor".to_string(),
-            },
-            WHyperlink(super::Link::Anchor("Anchor".to_string())),
-            WHyperlink(super::Link::Relationship("RelId".to_string())),
-        ];
+    #[rstest]
+    #[case(Tag::AGraphic, (owned_name("a", "graphic"), vec![]))]
+    #[case(Tag::AGraphicData, (owned_name("a", "graphicData"), vec![]))]
+    #[case(Tag::PicPic, (owned_name("pic", "pic"), vec![]))]
+    #[case(Tag::PicBlipFill, (owned_name("pic", "blipFill"), vec![]))]
+    #[case(Tag::MoMathPara, (owned_name("m", "oMathPara"), vec![]))]
+    #[case(Tag::MoMath, (owned_name("m", "oMath"), vec![]))]
+    #[case(Tag::MDelim, (owned_name("m", "d"), vec![]))]
+    #[case(Tag::MRad, (owned_name("m", "rad"), vec![]))]
+    #[case(Tag::MDeg, (owned_name("m", "deg"), vec![]))]
+    #[case(Tag::MRun, (owned_name("m", "r"), vec![]))]
+    #[case(Tag::MText, (owned_name("m", "t"), vec![]))]
+    #[case(Tag::MSub, (owned_name("m", "sub"), vec![]))]
+    #[case(Tag::MSup, (owned_name("m", "sup"), vec![]))]
+    #[case(Tag::MNary, (owned_name("m", "nary"), vec![]))]
+    #[case(Tag::MNaryPr, (owned_name("m", "naryPr"), vec![]))]
+    #[case(Tag::MFraction, (owned_name("m", "f"), vec![]))]
+    #[case(Tag::MFunc, (owned_name("m", "func"), vec![]))]
+    #[case(Tag::MFName, (owned_name("m", "fName"), vec![]))]
+    #[case(Tag::MNum, (owned_name("m", "num"), vec![]))]
+    #[case(Tag::MDen, (owned_name("m", "den"), vec![]))]
+    #[case(Tag::WPInline, (owned_name("wp", "inline"), vec![]))]
+    #[case(Tag::WPAnchor, (owned_name("wp", "anchor"), vec![]))]
+    #[case(Tag::WBookmarkEnd, (owned_name("w", "bookmarkEnd"), vec![]))]
+    #[case(Tag::WDrawing, (owned_name("w", "drawing"), vec![]))]
+    #[case(Tag::WParagraph, (owned_name("w", "p"), vec![]))]
+    #[case(Tag::WRun, (owned_name("w", "r"), vec![]))]
+    #[case(Tag::WText, (owned_name("w", "t"), vec![]))]
+    #[case(Tag::ABlip { rel: "RelId".to_string() }, (owned_name("a", "blip"), vec![owned_attr("r", "id", "RelId")]))]
+    #[case(Tag::MChr { value: "X".to_string() }, (owned_name("m", "chr"), vec![owned_attr("m", "val", "X")]))]
+    #[case(Tag::WBookmarkStart { anchor: "Anchor".to_string() }, (owned_name("w", "bookmarkStart"), vec![owned_attr("w", "anchor", "Anchor")]))]
+    #[case(Tag::WHyperlink(Link::Anchor("Anchor".to_string())), (owned_name("w", "hyperlink"), vec![owned_attr("w", "anchor", "Anchor")]))]
+    #[case(Tag::WHyperlink(Link::Relationship("RelId".to_string())), (owned_name("w", "hyperlink"), vec![owned_attr("r", "id", "RelId")]))]
+    fn to_owned_works(#[case] input: Tag, #[case] output: (OwnedName, Vec<OwnedAttribute>)) {
+        let (e_name, e_attrs) = &output;
+        let owned = input.to_owned();
 
-        assert_eq!(expected.len(), tags.len());
-        for i in 0..expected.len() {
-            let (e_name, e_attrs) = &expected[i];
-            let owned = tags[i].to_owned();
+        assert!(owned.is_some());
+        let (a_name, a_attrs) = owned.unwrap();
 
-            assert!(owned.is_some());
-            let (a_name, a_attrs) = owned.unwrap();
+        assert_eq!(e_name.local_name, a_name.local_name);
+        assert_eq!(e_name.prefix, a_name.prefix);
 
-            assert_eq!(e_name.local_name, a_name.local_name);
-            assert_eq!(e_name.prefix, a_name.prefix);
+        assert_eq!(e_attrs.len(), a_attrs.len());
+        for j in 0..e_attrs.len() {
+            let e_attr = &e_attrs[j];
+            let a_attr = &a_attrs[j];
 
-            assert_eq!(e_attrs.len(), a_attrs.len());
-            for j in 0..e_attrs.len() {
-                let e_attr = &e_attrs[j];
-                let a_attr = &a_attrs[j];
-
-                assert_eq!(e_attr.name.local_name, a_attr.name.local_name);
-                assert_eq!(e_attr.name.prefix, a_attr.name.prefix);
-                assert_eq!(e_attr.value, a_attr.value);
-            }
+            assert_eq!(e_attr.name.local_name, a_attr.name.local_name);
+            assert_eq!(e_attr.name.prefix, a_attr.name.prefix);
+            assert_eq!(e_attr.value, a_attr.value);
         }
     }
 
@@ -447,7 +389,7 @@ mod test {
 
     #[test]
     fn ablip_extracts_ablip() {
-        let tag = super::Tag::ABlip {
+        let tag = Tag::ABlip {
             rel: "RelId".to_string(),
         };
         let extracted = tag.a_blip();
@@ -457,7 +399,7 @@ mod test {
 
     #[test]
     fn ablip_rejects_other() {
-        let tag = super::Tag::Unknown {
+        let tag = Tag::Unknown {
             id: "Junk".to_string(),
         };
         let extracted = tag.a_blip();
@@ -466,7 +408,7 @@ mod test {
 
     #[test]
     fn mchr_extracts_mchr() {
-        let tag = super::Tag::MChr {
+        let tag = Tag::MChr {
             value: "X".to_string(),
         };
         let extracted = tag.m_chr();
@@ -476,7 +418,7 @@ mod test {
 
     #[test]
     fn mchr_rejects_other() {
-        let tag = super::Tag::Unknown {
+        let tag = Tag::Unknown {
             id: "Junk".to_string(),
         };
         let extracted = tag.m_chr();
@@ -485,7 +427,7 @@ mod test {
 
     #[test]
     fn wbookmarkstart_extracts_wbookmarkstart() {
-        let tag = super::Tag::WBookmarkStart {
+        let tag = Tag::WBookmarkStart {
             anchor: "Anchor".to_string(),
         };
         let extracted = tag.w_bookmark_start();
@@ -495,7 +437,7 @@ mod test {
 
     #[test]
     fn wbookmarkstart_rejects_other() {
-        let tag = super::Tag::Unknown {
+        let tag = Tag::Unknown {
             id: "Junk".to_string(),
         };
         let extracted = tag.w_bookmark_start();
@@ -504,29 +446,29 @@ mod test {
 
     #[test]
     fn whyperlink_extracts_whyperlink_anchor() {
-        let anchor = super::Tag::WHyperlink(super::Link::Anchor("Anchor".to_string()));
+        let anchor = Tag::WHyperlink(Link::Anchor("Anchor".to_string()));
         let extracted = anchor.w_hyperlink();
         assert!(extracted.is_some());
-        assert!(matches!(extracted.unwrap(), super::Link::Anchor(_)));
-        if let Some(super::Link::Anchor(anchor)) = extracted {
+        assert!(matches!(extracted.unwrap(), Link::Anchor(_)));
+        if let Some(Link::Anchor(anchor)) = extracted {
             assert_eq!(anchor, "Anchor");
         }
     }
 
     #[test]
     fn whyperlink_extracts_whyperlink_relationship() {
-        let rel = super::Tag::WHyperlink(super::Link::Relationship("RelId".to_string()));
+        let rel = Tag::WHyperlink(Link::Relationship("RelId".to_string()));
         let extracted = rel.w_hyperlink();
         assert!(extracted.is_some());
-        assert!(matches!(extracted.unwrap(), super::Link::Relationship(_)));
-        if let Some(super::Link::Relationship(rel)) = extracted {
+        assert!(matches!(extracted.unwrap(), Link::Relationship(_)));
+        if let Some(Link::Relationship(rel)) = extracted {
             assert_eq!(rel, "RelId");
         }
     }
 
     #[test]
     fn whyperlink_rejects_other() {
-        let tag = super::Tag::Unknown {
+        let tag = Tag::Unknown {
             id: "Junk".to_string(),
         };
         let extracted = tag.w_hyperlink();
@@ -535,7 +477,7 @@ mod test {
 
     #[test]
     fn content_extracts_content() {
-        let tag = super::Tag::Content("Content".to_string());
+        let tag = Tag::Content("Content".to_string());
         let extracted = tag.content();
         assert!(extracted.is_some());
         assert_eq!(extracted.unwrap(), "Content");
@@ -543,7 +485,7 @@ mod test {
 
     #[test]
     fn content_rejects_other() {
-        let tag = super::Tag::Unknown {
+        let tag = Tag::Unknown {
             id: "Junk".to_string(),
         };
         let extracted = tag.content();
@@ -561,35 +503,35 @@ mod test {
 
     #[test]
     fn converts_empty_tags() {
-        use super::Tag::*;
+        use Tag::*;
         let owned_names = vec![
-            super::owned_name("a", "graphic"),
-            super::owned_name("a", "graphicData"),
-            super::owned_name("pic", "pic"),
-            super::owned_name("pic", "blipFill"),
-            super::owned_name("m", "oMathPara"),
-            super::owned_name("m", "oMath"),
-            super::owned_name("m", "d"),
-            super::owned_name("m", "rad"),
-            super::owned_name("m", "deg"),
-            super::owned_name("m", "r"),
-            super::owned_name("m", "t"),
-            super::owned_name("m", "sub"),
-            super::owned_name("m", "sup"),
-            super::owned_name("m", "nary"),
-            super::owned_name("m", "naryPr"),
-            super::owned_name("m", "f"),
-            super::owned_name("m", "func"),
-            super::owned_name("m", "fName"),
-            super::owned_name("m", "num"),
-            super::owned_name("m", "den"),
-            super::owned_name("wp", "inline"),
-            super::owned_name("wp", "anchor"),
-            super::owned_name("w", "bookmarkEnd"),
-            super::owned_name("w", "drawing"),
-            super::owned_name("w", "p"),
-            super::owned_name("w", "r"),
-            super::owned_name("w", "t"),
+            owned_name("a", "graphic"),
+            owned_name("a", "graphicData"),
+            owned_name("pic", "pic"),
+            owned_name("pic", "blipFill"),
+            owned_name("m", "oMathPara"),
+            owned_name("m", "oMath"),
+            owned_name("m", "d"),
+            owned_name("m", "rad"),
+            owned_name("m", "deg"),
+            owned_name("m", "r"),
+            owned_name("m", "t"),
+            owned_name("m", "sub"),
+            owned_name("m", "sup"),
+            owned_name("m", "nary"),
+            owned_name("m", "naryPr"),
+            owned_name("m", "f"),
+            owned_name("m", "func"),
+            owned_name("m", "fName"),
+            owned_name("m", "num"),
+            owned_name("m", "den"),
+            owned_name("wp", "inline"),
+            owned_name("wp", "anchor"),
+            owned_name("w", "bookmarkEnd"),
+            owned_name("w", "drawing"),
+            owned_name("w", "p"),
+            owned_name("w", "r"),
+            owned_name("w", "t"),
         ];
         let expected = vec![
             AGraphic,
@@ -623,8 +565,7 @@ mod test {
         assert_eq!(owned_names.len(), expected.len());
         for i in 0..owned_names.len() {
             let name = &owned_names[i];
-            let actual =
-                super::Tag::try_from((name, &vec![])).expect("Input was constructed manually");
+            let actual = Tag::try_from((name, &vec![])).expect("Input was constructed manually");
             assert_eq!(actual, expected[i]);
         }
     }
@@ -637,12 +578,12 @@ mod test {
             value: "RelId".to_string(),
         };
 
-        let actual = super::Tag::try_from((&name, &vec![attribute]));
+        let actual = Tag::try_from((&name, &vec![attribute]));
         assert!(actual.is_ok());
         let actual = actual.unwrap();
 
-        assert!(matches!(actual, super::Tag::ABlip { rel: _ }));
-        if let super::Tag::ABlip { rel } = actual {
+        assert!(matches!(actual, Tag::ABlip { rel: _ }));
+        if let Tag::ABlip { rel } = actual {
             assert_eq!(rel, "RelId");
         }
     }
@@ -651,11 +592,11 @@ mod test {
     fn rejects_ablip_without_attribute() {
         let name = owned("a:blip");
 
-        let actual = super::Tag::try_from((&name, &vec![]));
+        let actual = Tag::try_from((&name, &vec![]));
 
         assert!(actual.is_err());
         let actual = actual.unwrap_err();
-        let super::InputError::MissingAttributes { id, missing } = actual;
+        let InputError::MissingAttributes { id, missing } = actual;
 
         assert_eq!(id, "a:blip");
         assert_eq!(missing, vec!["r:embed"]);
@@ -669,12 +610,12 @@ mod test {
             value: "X".to_string(),
         };
 
-        let actual = super::Tag::try_from((&name, &vec![attribute]));
+        let actual = Tag::try_from((&name, &vec![attribute]));
         assert!(actual.is_ok());
         let actual = actual.unwrap();
 
-        assert!(matches!(actual, super::Tag::MChr { value: _ }));
-        if let super::Tag::MChr { value } = actual {
+        assert!(matches!(actual, Tag::MChr { value: _ }));
+        if let Tag::MChr { value } = actual {
             assert_eq!(value, "X");
         }
     }
@@ -683,10 +624,10 @@ mod test {
     fn rejects_mchr_with_no_attribute() {
         let name = owned("m:chr");
 
-        let actual = super::Tag::try_from((&name, &vec![]));
+        let actual = Tag::try_from((&name, &vec![]));
         assert!(actual.is_err());
         let actual = actual.unwrap_err();
-        let super::InputError::MissingAttributes { id, missing } = actual;
+        let InputError::MissingAttributes { id, missing } = actual;
 
         assert_eq!(id, "m:chr");
         assert_eq!(missing, vec!["m:val"]);
@@ -700,12 +641,12 @@ mod test {
             value: "Anchor".to_string(),
         };
 
-        let actual = super::Tag::try_from((&name, &vec![attribute]));
+        let actual = Tag::try_from((&name, &vec![attribute]));
         assert!(actual.is_ok());
         let actual = actual.unwrap();
 
-        assert!(matches!(actual, super::Tag::WBookmarkStart { anchor: _ }));
-        if let super::Tag::WBookmarkStart { anchor } = actual {
+        assert!(matches!(actual, Tag::WBookmarkStart { anchor: _ }));
+        if let Tag::WBookmarkStart { anchor } = actual {
             assert_eq!(anchor, "Anchor");
         }
     }
@@ -714,12 +655,12 @@ mod test {
     fn accepts_wbookmarkstart_with_no_attribute() {
         let name = owned("w:bookmarkStart");
 
-        let actual = super::Tag::try_from((&name, &vec![]));
+        let actual = Tag::try_from((&name, &vec![]));
         assert!(actual.is_ok());
         let actual = actual.unwrap();
 
-        assert!(matches!(actual, super::Tag::WBookmarkStart { anchor: _ }));
-        if let super::Tag::WBookmarkStart { anchor } = actual {
+        assert!(matches!(actual, Tag::WBookmarkStart { anchor: _ }));
+        if let Tag::WBookmarkStart { anchor } = actual {
             assert_eq!(anchor, "");
         }
     }
@@ -732,15 +673,12 @@ mod test {
             value: "RelId".to_string(),
         };
 
-        let actual = super::Tag::try_from((&name, &vec![attribute]));
+        let actual = Tag::try_from((&name, &vec![attribute]));
         assert!(actual.is_ok());
         let actual = actual.unwrap();
 
-        assert!(matches!(
-            actual,
-            super::Tag::WHyperlink(super::Link::Relationship(_))
-        ));
-        if let super::Tag::WHyperlink(super::Link::Relationship(rel)) = actual {
+        assert!(matches!(actual, Tag::WHyperlink(Link::Relationship(_))));
+        if let Tag::WHyperlink(Link::Relationship(rel)) = actual {
             assert_eq!(rel, "RelId");
         }
     }
@@ -753,15 +691,12 @@ mod test {
             value: "Anchor".to_string(),
         };
 
-        let actual = super::Tag::try_from((&name, &vec![attribute]));
+        let actual = Tag::try_from((&name, &vec![attribute]));
         assert!(actual.is_ok());
         let actual = actual.unwrap();
 
-        assert!(matches!(
-            actual,
-            super::Tag::WHyperlink(super::Link::Anchor(_))
-        ));
-        if let super::Tag::WHyperlink(super::Link::Anchor(anchor)) = actual {
+        assert!(matches!(actual, Tag::WHyperlink(Link::Anchor(_))));
+        if let Tag::WHyperlink(Link::Anchor(anchor)) = actual {
             assert_eq!(anchor, "Anchor");
         }
     }
@@ -770,10 +705,10 @@ mod test {
     fn rejects_whyperlink_with_no_attributes() {
         let name = owned("w:hyperlink");
 
-        let actual = super::Tag::try_from((&name, &vec![]));
+        let actual = Tag::try_from((&name, &vec![]));
         assert!(actual.is_err());
         let actual = actual.unwrap_err();
-        let super::InputError::MissingAttributes { id, missing } = actual;
+        let InputError::MissingAttributes { id, missing } = actual;
 
         assert_eq!(id, "w:hyperlink");
         assert_eq!(missing, vec!["r:id", "w:anchor"]);
@@ -787,12 +722,12 @@ mod test {
             value: "Alien".to_string(),
         };
 
-        let actual = super::Tag::try_from((&name, &vec![attribute]));
+        let actual = Tag::try_from((&name, &vec![attribute]));
         assert!(actual.is_ok());
         let actual = actual.unwrap();
 
-        assert!(matches!(actual, super::Tag::Unknown { id: _ }));
-        if let super::Tag::Unknown { id } = actual {
+        assert!(matches!(actual, Tag::Unknown { id: _ }));
+        if let Tag::Unknown { id } = actual {
             assert_eq!(id, "alien:tag");
         }
     }
