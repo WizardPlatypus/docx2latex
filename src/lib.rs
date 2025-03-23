@@ -619,7 +619,7 @@ Relationships>
     #[case("∏", "\\prod")]
     #[case("∑", "\\sum")]
     #[case("∮", "\\oint")]
-    fn very_long_test_name(#[case] input: &str, #[case] output: &str) {
+    fn start_element_recognizes_mchr(#[case] input: &str, #[case] output: &str) {
         let Fixture {
             mut buf_writer,
             rels: _,
