@@ -53,7 +53,14 @@ pub fn drawing<W: Write>(
 
 #[cfg(test)]
 mod test {
-    use std::io::Read;
+    use std::io::{Read, Write};
+
+    fn drain<W: Write>(buf_writer: &mut std::io::BufWriter<W>) -> std::io::Result<String> {
+        let mut s = String::new();
+        buf_writer.buffer().read_to_string(&mut s)?;
+        buf_writer.flush()?;
+        Ok(s)
+    }
 
     #[test]
     fn hyperlink_with_anchor_works() {
@@ -67,9 +74,7 @@ mod test {
         let state = state.unwrap();
         assert_eq!(state, super::State::Happy);
 
-        let mut written = String::new();
-        buf_writer.buffer().read_to_string(&mut written).unwrap();
-        assert_eq!(written, "\\hyperlink{Anchor}{Content}");
+        assert_eq!(drain(&mut buf_writer).unwrap(), "\\hyperlink{Anchor}{Content}");
     }
 
     #[test]
@@ -86,9 +91,7 @@ mod test {
         assert_eq!(state, super::State::Happy);
 
 
-        let mut written = String::new();
-        buf_writer.buffer().read_to_string(&mut written).unwrap();
-        assert_eq!(written, "\\href{TestValue}{Content}");
+        assert_eq!(drain(&mut buf_writer).unwrap(), "\\href{TestValue}{Content}");
     }
 
     #[test]
@@ -104,9 +107,7 @@ mod test {
         assert_eq!(state, super::State::RelationshipMissing);
 
 
-        let mut written = String::new();
-        assert!(buf_writer.buffer().read_to_string(&mut written).is_ok());
-        assert_eq!(written, "Content");
+        assert_eq!(drain(&mut buf_writer).unwrap(), "Content");
     }
 
     #[test]
@@ -120,9 +121,7 @@ mod test {
         let state = state.unwrap();
         assert_eq!(state, super::State::Happy);
 
-        let mut written = String::new();
-        buf_writer.buffer().read_to_string(&mut written).unwrap();
-        assert_eq!(written, "\\includegraphics[width=\\textwidth]{\"value\"}");
+        assert_eq!(drain(&mut buf_writer).unwrap(), "\\includegraphics[width=\\textwidth]{\"value\"}");
     }
 
     #[test]
@@ -135,8 +134,6 @@ mod test {
         let state = state.unwrap();
         assert_eq!(state, super::State::RelationshipMissing);
 
-        let mut written = String::new();
-        assert!(buf_writer.buffer().read_to_string(&mut written).is_ok());
-        assert_eq!(written, "");
+        assert_eq!(drain(&mut buf_writer).unwrap(), "");
     }
 }
