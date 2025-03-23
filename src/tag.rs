@@ -501,73 +501,37 @@ mod test {
         }
     }
 
-    #[test]
-    fn converts_empty_tags() {
-        use Tag::*;
-        let owned_names = vec![
-            owned_name("a", "graphic"),
-            owned_name("a", "graphicData"),
-            owned_name("pic", "pic"),
-            owned_name("pic", "blipFill"),
-            owned_name("m", "oMathPara"),
-            owned_name("m", "oMath"),
-            owned_name("m", "d"),
-            owned_name("m", "rad"),
-            owned_name("m", "deg"),
-            owned_name("m", "r"),
-            owned_name("m", "t"),
-            owned_name("m", "sub"),
-            owned_name("m", "sup"),
-            owned_name("m", "nary"),
-            owned_name("m", "naryPr"),
-            owned_name("m", "f"),
-            owned_name("m", "func"),
-            owned_name("m", "fName"),
-            owned_name("m", "num"),
-            owned_name("m", "den"),
-            owned_name("wp", "inline"),
-            owned_name("wp", "anchor"),
-            owned_name("w", "bookmarkEnd"),
-            owned_name("w", "drawing"),
-            owned_name("w", "p"),
-            owned_name("w", "r"),
-            owned_name("w", "t"),
-        ];
-        let expected = vec![
-            AGraphic,
-            AGraphicData,
-            PicPic,
-            PicBlipFill,
-            MoMathPara,
-            MoMath,
-            MDelim,
-            MRad,
-            MDeg,
-            MRun,
-            MText,
-            MSub,
-            MSup,
-            MNary,
-            MNaryPr,
-            MFraction,
-            MFunc,
-            MFName,
-            MNum,
-            MDen,
-            WPInline,
-            WPAnchor,
-            WBookmarkEnd,
-            WDrawing,
-            WParagraph,
-            WRun,
-            WText,
-        ];
-        assert_eq!(owned_names.len(), expected.len());
-        for i in 0..owned_names.len() {
-            let name = &owned_names[i];
-            let actual = Tag::try_from((name, &vec![])).expect("Input was constructed manually");
-            assert_eq!(actual, expected[i]);
-        }
+    #[rstest]
+    #[case(Tag::AGraphic, owned_name("a", "graphic"))]
+    #[case(Tag::AGraphicData, owned_name("a", "graphicData"))]
+    #[case(Tag::PicPic, owned_name("pic", "pic"))]
+    #[case(Tag::PicBlipFill, owned_name("pic", "blipFill"))]
+    #[case(Tag::MoMathPara, owned_name("m", "oMathPara"))]
+    #[case(Tag::MoMath, owned_name("m", "oMath"))]
+    #[case(Tag::MDelim, owned_name("m", "d"))]
+    #[case(Tag::MRad, owned_name("m", "rad"))]
+    #[case(Tag::MDeg, owned_name("m", "deg"))]
+    #[case(Tag::MRun, owned_name("m", "r"))]
+    #[case(Tag::MText, owned_name("m", "t"))]
+    #[case(Tag::MSub, owned_name("m", "sub"))]
+    #[case(Tag::MSup, owned_name("m", "sup"))]
+    #[case(Tag::MNary, owned_name("m", "nary"))]
+    #[case(Tag::MNaryPr, owned_name("m", "naryPr"))]
+    #[case(Tag::MFraction, owned_name("m", "f"))]
+    #[case(Tag::MFunc, owned_name("m", "func"))]
+    #[case(Tag::MFName, owned_name("m", "fName"))]
+    #[case(Tag::MNum, owned_name("m", "num"))]
+    #[case(Tag::MDen, owned_name("m", "den"))]
+    #[case(Tag::WPInline, owned_name("wp", "inline"))]
+    #[case(Tag::WPAnchor, owned_name("wp", "anchor"))]
+    #[case(Tag::WBookmarkEnd, owned_name("w", "bookmarkEnd"))]
+    #[case(Tag::WDrawing, owned_name("w", "drawing"))]
+    #[case(Tag::WParagraph, owned_name("w", "p"))]
+    #[case(Tag::WRun, owned_name("w", "r"))]
+    #[case(Tag::WText, owned_name("w", "t"))]
+    fn converts_empty_tags(#[case] tag: Tag, #[case] owned: OwnedName) {
+        let actual = Tag::try_from((&owned, &vec![])).expect("Input was constructed manually");
+        assert_eq!(actual, tag);
     }
 
     #[test]
