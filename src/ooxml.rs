@@ -1,7 +1,7 @@
+use super::{blink, Link, Tag};
 use crate::peekaboo::Peek;
-use super::{blink, Boo, Link, Tag};
 
-pub fn hyperlink(boo: &Boo<Tag>) -> Option<(&Link, &String)> {
+pub fn hyperlink<P: Peek<Item = Tag>>(boo: &P) -> Option<(&Link, &String)> {
     boo.reset();
     let content = boo.peek()?.content()?;
     blink(matches!(boo.peek()?, Tag::WText))?;
@@ -10,7 +10,7 @@ pub fn hyperlink(boo: &Boo<Tag>) -> Option<(&Link, &String)> {
     Some((link, content))
 }
 
-pub fn drawing(boo: &Boo<Tag>) -> Option<&String> {
+pub fn drawing<P: Peek<Item = Tag>>(boo: &P) -> Option<&String> {
     boo.reset();
     let rel = boo.peek()?.a_blip()?;
     blink(matches!(boo.peek()?, Tag::PicBlipFill))?;
@@ -23,7 +23,7 @@ pub fn drawing(boo: &Boo<Tag>) -> Option<&String> {
     Some(rel)
 }
 
-pub fn word_text(boo: &Boo<Tag>) -> Option<&String> {
+pub fn word_text<P: Peek<Item = Tag>>(boo: &P) -> Option<&String> {
     boo.reset();
     let content = boo.peek()?.content()?;
     blink(matches!(boo.peek()?, Tag::WText))?;
@@ -31,7 +31,7 @@ pub fn word_text(boo: &Boo<Tag>) -> Option<&String> {
     Some(content)
 }
 
-pub fn math_text(boo: &Boo<Tag>) -> Option<&String> {
+pub fn math_text<P: Peek<Item = Tag>>(boo: &P) -> Option<&String> {
     boo.reset();
     let content = boo.peek()?.content()?;
     blink(matches!(boo.peek()?, Tag::MText))?;
@@ -42,14 +42,13 @@ pub fn math_text(boo: &Boo<Tag>) -> Option<&String> {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::Boo;
     #[test]
     fn hyperlink_works() {
         let mut boo = Boo::default();
         assert!(hyperlink(&boo).is_none());
 
-        boo.push(Tag::WHyperlink(Link::Anchor(
-            "Anchor".to_string(),
-        )));
+        boo.push(Tag::WHyperlink(Link::Anchor("Anchor".to_string())));
         assert!(hyperlink(&boo).is_none());
 
         boo.push(Tag::WRun);

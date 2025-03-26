@@ -15,7 +15,7 @@ mod ooxml;
 mod peekaboo;
 mod tag;
 
-use peekaboo::Boo;
+use peekaboo::{Boo, Peek};
 use tag::{normalize, InputError, Link, Tag};
 
 fn blink(value: bool) -> Option<()> {
@@ -151,15 +151,13 @@ fn start_element<W: Write>(
     Ok(State::OpenedTag(tag))
 }
 
-fn end_element<W: Write>(
+fn end_element<W: Write, P: Peek<Item = Tag>>(
     buf_writer: &mut BufWriter<W>,
-    stack: &Boo<Tag>,
+    stack: &P,
     rels: &HashMap<String, String>,
     math_mode: &mut bool,
     nary_has_chr: &mut Option<bool>,
 ) -> std::io::Result<State> {
-    log::debug!("Stack: {:?}", &stack);
-
     if let Some(rel) = ooxml::drawing(stack) {
         // ["w:drawing", ("wp:inline"/"wp:anchor"), "a:graphic", "a:graphicData", "pic:pic", "pic:blipFill", "a:blip"]
         latex::drawing(buf_writer, rels, rel)?;
@@ -217,9 +215,9 @@ fn end_element<W: Write>(
     Ok(State::ClosedTag)
 }
 
-fn xml_event<W: Write>(
+fn xml_event<W: Write, P: Peek<Item = Tag>>(
     buf_writer: &mut BufWriter<W>,
-    stack: &Boo<Tag>,
+    stack: &P,
     rels: &HashMap<String, String>,
     event: &XmlEvent,
     math_mode: &mut bool,

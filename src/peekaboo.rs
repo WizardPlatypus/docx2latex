@@ -1,9 +1,13 @@
-use std::{cell::Cell, fmt::Debug, ops::{Deref, DerefMut}};
+use std::{
+    cell::Cell,
+    fmt::Debug,
+    ops::{Deref, DerefMut},
+};
 
 /// A stack that allows to peek at progressively more elements
 pub struct Boo<T> {
     vec: Vec<T>,
-    peeked: Cell<usize>
+    peeked: Cell<usize>,
 }
 
 pub trait Peek {
@@ -16,6 +20,7 @@ pub trait Peek {
     fn len(&self) -> usize;
     fn get(&self, index: usize) -> Option<&Self::Item>;
     // provided
+    fn last(&self) -> Option<&Self::Item>;
     fn peek(&self) -> Option<&Self::Item> {
         let peeked = self.peeked();
         self.incr();
@@ -49,11 +54,18 @@ impl<T> Peek for Boo<T> {
     fn get(&self, index: usize) -> Option<&Self::Item> {
         self.vec.get(index)
     }
+
+    fn last(&self) -> Option<&Self::Item> {
+        self.vec.last()
+    }
 }
 
 impl<T> Default for Boo<T> {
     fn default() -> Self {
-        Self { vec: vec![], peeked: Default::default() }
+        Self {
+            vec: vec![],
+            peeked: Default::default(),
+        }
     }
 }
 
@@ -73,7 +85,10 @@ impl<T> DerefMut for Boo<T> {
 
 impl<T> From<Vec<T>> for Boo<T> {
     fn from(value: Vec<T>) -> Self {
-        Boo { vec: value, peeked: Cell::new(0) }
+        Boo {
+            vec: value,
+            peeked: Cell::new(0),
+        }
     }
 }
 
