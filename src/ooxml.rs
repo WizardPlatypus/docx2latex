@@ -90,6 +90,21 @@ mod test {
     }
 
     #[test]
+    #[should_panic]
+    fn hyperlink_fails() {
+        let boo = Unimock::new((
+            MockPeek::peek.next_call(matching!()).returns(Some(Tag::Content("Content".to_string()))),
+            MockPeek::peek.next_call(matching!()).returns(Some(Tag::WText)),
+            MockPeek::peek.next_call(matching!()).returns(Some(Tag::WRun)),
+            MockPeek::peek.next_call(matching!()).returns(Some(Tag::WHyperlink(Link::Anchor("Any".to_string())))),
+        ));
+
+        let (link, content) = hyperlink(&boo).unwrap();
+        assert_eq!(link, &Link::Anchor("Any".to_string()));
+        assert_eq!(content, "Content");
+    }
+
+    #[test]
     fn drawing_works() {
         let mut boo = Boo::default();
         assert!(drawing(&boo).is_none());
