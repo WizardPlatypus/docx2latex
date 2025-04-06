@@ -3,6 +3,8 @@ use std::{
     fmt::Debug,
     ops::{Deref, DerefMut},
 };
+#[cfg(test)]
+use unimock::unimock;
 
 /// A stack that allows to peek at progressively more elements
 pub struct Boo<T> {
@@ -10,6 +12,7 @@ pub struct Boo<T> {
     peeked: Cell<usize>,
 }
 
+#[cfg_attr(test, unimock(api=MockPeek, type Item=crate::Tag;))]
 pub trait Peek {
     type Item;
 
@@ -20,7 +23,14 @@ pub trait Peek {
     fn len(&self) -> usize;
     fn get(&self, index: usize) -> Option<&Self::Item>;
     // provided
-    fn last(&self) -> Option<&Self::Item>;
+    fn last(&self) -> Option<&Self::Item> {
+        if self.len() > 0 {
+            self.get(self.len() - 1)
+        } else {
+            None
+        }
+    }
+
     fn peek(&self) -> Option<&Self::Item> {
         let peeked = self.peeked();
         self.incr();
@@ -47,22 +57,18 @@ impl<T> Peek for Boo<T> {
         self.peeked.set(0);
     }
 
-    fn len(&self) -> usize {
-        self.vec.len()
-    }
-
-    fn get(&self, index: usize) -> Option<&Self::Item> {
+    fn get(&self, index: usize) -> Option<&T> {
         self.vec.get(index)
     }
 
-    fn last(&self) -> Option<&Self::Item> {
-        self.vec.last()
+    fn len(&self) -> usize {
+        self.vec.len()
     }
 }
 
 impl<T> Default for Boo<T> {
-    fn default() -> Self {
-        Self {
+    fn default() -> Boo<T> {
+        Boo {
             vec: vec![],
             peeked: Default::default(),
         }
@@ -72,13 +78,13 @@ impl<T> Default for Boo<T> {
 impl<T> Deref for Boo<T> {
     type Target = Vec<T>;
 
-    fn deref(&self) -> &Self::Target {
+    fn deref(&self) -> &Vec<T> {
         &self.vec
     }
 }
 
 impl<T> DerefMut for Boo<T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
+    fn deref_mut(&mut self) -> &mut Vec<T> {
         &mut self.vec
     }
 }
@@ -105,8 +111,8 @@ mod test {
     #[test]
     fn default_is_empty() {
         let boo: Boo<usize> = Boo::default();
-        assert_eq!(boo.vec.len(), 0);
-        assert_eq!(boo.peeked.get(), 0)
+        assert_eq!(boo.len(), 0);
+        assert_eq!(boo.peeked(), 0)
     }
 
     #[test]
@@ -146,13 +152,13 @@ mod test {
         let boo = Boo::from(vec![0, 1, 2, 3, 4]);
 
         assert_eq!(boo.peek(), Some(&4));
-        assert_eq!(boo.peeked.get(), 1);
+        assert_eq!(boo.peeked(), 1);
 
         assert_eq!(boo.peek(), Some(&3));
-        assert_eq!(boo.peeked.get(), 2);
+        assert_eq!(boo.peeked(), 2);
 
         assert_eq!(boo.peek(), Some(&2));
-        assert_eq!(boo.peeked.get(), 3);
+        assert_eq!(boo.peeked(), 3);
     }
 
     #[test]
@@ -160,22 +166,22 @@ mod test {
         let boo = Boo::from(vec![0, 1, 2]);
 
         assert_eq!(boo.peek(), Some(&2));
-        assert_eq!(boo.peeked.get(), 1);
+        assert_eq!(boo.peeked(), 1);
 
         assert_eq!(boo.peek(), Some(&1));
-        assert_eq!(boo.peeked.get(), 2);
+        assert_eq!(boo.peeked(), 2);
 
         assert_eq!(boo.peek(), Some(&0));
-        assert_eq!(boo.peeked.get(), 3);
+        assert_eq!(boo.peeked(), 3);
 
         assert_eq!(boo.peek(), None);
-        assert_eq!(boo.peeked.get(), 4);
+        assert_eq!(boo.peeked(), 4);
 
         assert_eq!(boo.peek(), None);
-        assert_eq!(boo.peeked.get(), 5);
+        assert_eq!(boo.peeked(), 5);
 
         assert_eq!(boo.peek(), None);
-        assert_eq!(boo.peeked.get(), 6);
+        assert_eq!(boo.peeked(), 6);
     }
 
     #[test]
@@ -183,11 +189,11 @@ mod test {
         let boo = Boo::from(vec![0]);
 
         assert_eq!(boo.peek(), Some(&0));
-        assert_eq!(boo.peeked.get(), 1);
+        assert_eq!(boo.peeked(), 1);
 
         boo.reset();
 
         assert_eq!(boo.peek(), Some(&0));
-        assert_eq!(boo.peeked.get(), 1);
+        assert_eq!(boo.peeked(), 1);
     }
 }

@@ -11,3 +11,4 @@ xml = "0.8.20"
 
 [dev-dependencies]
 rstest = "0.25.0"
+unimock = "0.6.7"

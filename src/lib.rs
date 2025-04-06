@@ -341,6 +341,9 @@ mod test {
     };
 
     use rstest::rstest;
+    use unimock::{matching, MockFn, Unimock};
+
+    use crate::peekaboo::MockPeek;
 
     use super::{
         blink, end_element, escape,
@@ -349,6 +352,8 @@ mod test {
         tag::{owned_attr, owned_name, Tag},
         xml_event, State,
     };
+
+    use xml::{namespace::Namespace, reader::XmlEvent};
 
     #[test]
     fn blink_true_is_some() {
@@ -663,19 +668,90 @@ Relationships>
         assert_eq!(drain(&mut buf_writer).unwrap(), output);
     }
 
-    #[test]
-    fn end_element_recognizes_lonely_tags() {
+    #[rstest]
+    #[case(true)]
+    #[case(false)]
+    fn end_element_recognizes_momathpara(#[case] mut mode: bool) {
         let Fixture {
             mut buf_writer,
             rels,
-            mut stack,
+            stack: _,
+            math_mode: _,
+            mut nary_has_chr,
+        } = Fixture::default();
+
+        let stack = Unimock::new((
+            MockPeek::reset.each_call(matching!()).returns(()),
+            MockPeek::peek.each_call(matching!()).returns(None::<Tag>),
+            MockPeek::last
+                .each_call(matching!())
+                .returns(Some(Tag::MoMathPara))
+                .once(),
+        ));
+
+        let state = end_element(&mut buf_writer, &stack, &rels, &mut mode, &mut nary_has_chr);
+        assert!(matches!(state, Ok(State::ClosedTag)));
+        assert!(!mode);
+        assert_eq!(drain(&mut buf_writer).unwrap(), "$$\n");
+    }
+
+    #[rstest]
+    #[case(Some(true), "")]
+    #[case(Some(false), "\\int")]
+    #[case(None, "")]
+    fn end_element_recognizes_nary(#[case] mut nary: Option<bool>, #[case] latex: &'static str) {
+        let Fixture {
+            mut buf_writer,
+            rels,
+            stack: _,
+            mut math_mode,
+            nary_has_chr: _,
+        } = Fixture::default();
+
+        let stack = Unimock::new((
+            MockPeek::reset.each_call(matching!()).returns(()),
+            MockPeek::peek.each_call(matching!()).returns(None::<Tag>),
+            MockPeek::last
+                .each_call(matching!())
+                .returns(Some(Tag::MNaryPr))
+                .once(),
+        ));
+
+        let state = end_element(&mut buf_writer, &stack, &rels, &mut math_mode, &mut nary);
+        assert!(matches!(state, Ok(State::ClosedTag)));
+        assert!(nary.is_none());
+        assert_eq!(drain(&mut buf_writer).unwrap(), latex);
+    }
+
+    #[rstest]
+    #[case(Tag::WParagraph, "\n\n")]
+    #[case(Tag::WBookmarkStart { anchor: "Anchor".to_string() }, "\\hypertarget{Anchor}{")]
+    #[case(Tag::MDelim, ")")]
+    #[case(Tag::MDeg, "]{")]
+    #[case(Tag::MSub, "}")]
+    #[case(Tag::MSup, "}")]
+    #[case(Tag::MNum, "}")]
+    #[case(Tag::MDen, "}")]
+    #[case(Tag::MRad, "}")]
+    #[case(Tag::WBookmarkEnd, "}")]
+    fn end_element_recognizes_lonely_tags(#[case] tag: Tag, #[case] latex: &'static str) {
+        let Fixture {
+            mut buf_writer,
+            rels,
+            stack: _,
             mut math_mode,
             mut nary_has_chr,
         } = Fixture::default();
 
-        //// w:p
+        let stack = Unimock::new((
+            MockPeek::reset.each_call(matching!()).returns(()),
+            MockPeek::peek.each_call(matching!()).returns(None::<Tag>),
+            MockPeek::last
+                .each_call(matching!())
+                .returns(Some(tag))
+                .once(),
+        ));
 
-        stack.push(Tag::WParagraph);
         let state = end_element(
             &mut buf_writer,
             &stack,
@@ -683,249 +759,49 @@ Relationships>
             &mut math_mode,
             &mut nary_has_chr,
         );
-        assert!(state.is_ok());
-        assert_eq!(state.unwrap(), State::ClosedTag);
-
-        assert_eq!(drain(&mut buf_writer).unwrap(), "\n\n");
-        stack.pop();
-
-        //// w:bookmarkStart
-
-        stack.push(Tag::WBookmarkStart {
-            anchor: "Anchor".to_string(),
-        });
-        let state = end_element(
-            &mut buf_writer,
-            &stack,
-            &rels,
-            &mut math_mode,
-            &mut nary_has_chr,
-        );
-        assert!(state.is_ok());
-        assert_eq!(state.unwrap(), State::ClosedTag);
-
-        assert_eq!(drain(&mut buf_writer).unwrap(), "\\hypertarget{Anchor}{");
-        stack.pop();
-
-        //// m:d
-
-        stack.push(Tag::MDelim);
-        let state = end_element(
-            &mut buf_writer,
-            &stack,
-            &rels,
-            &mut math_mode,
-            &mut nary_has_chr,
-        );
-        assert!(state.is_ok());
-        assert_eq!(state.unwrap(), State::ClosedTag);
-
-        assert_eq!(drain(&mut buf_writer).unwrap(), ")");
-        stack.pop();
-
-        //// m:oMathPara math_mode = false
-
-        math_mode = false;
-        stack.push(Tag::MoMathPara);
-        let state = end_element(
-            &mut buf_writer,
-            &stack,
-            &rels,
-            &mut math_mode,
-            &mut nary_has_chr,
-        );
-        assert!(state.is_ok());
-        assert_eq!(state.unwrap(), State::ClosedTag);
-        assert!(!math_mode);
-
-        assert_eq!(drain(&mut buf_writer).unwrap(), "$$\n");
-
-        //// m:oMathPara math_mode = true
-
-        math_mode = true;
-        let state = end_element(
-            &mut buf_writer,
-            &stack,
-            &rels,
-            &mut math_mode,
-            &mut nary_has_chr,
-        );
-        assert!(state.is_ok());
-        assert_eq!(state.unwrap(), State::ClosedTag);
-        assert!(!math_mode);
-
-        assert_eq!(drain(&mut buf_writer).unwrap(), "$$\n");
-        stack.pop();
-
-        //// m:deg
-
-        stack.push(Tag::MDeg);
-        let state = end_element(
-            &mut buf_writer,
-            &stack,
-            &rels,
-            &mut math_mode,
-            &mut nary_has_chr,
-        );
-        assert!(state.is_ok());
-        assert_eq!(state.unwrap(), State::ClosedTag);
-
-        assert_eq!(drain(&mut buf_writer).unwrap(), "]{");
-        stack.pop();
-
-        //// m:sub
-
-        stack.push(Tag::MSub);
-        let state = end_element(
-            &mut buf_writer,
-            &stack,
-            &rels,
-            &mut math_mode,
-            &mut nary_has_chr,
-        );
-        assert!(state.is_ok());
-        assert_eq!(state.unwrap(), State::ClosedTag);
-
-        assert_eq!(drain(&mut buf_writer).unwrap(), "}");
-        stack.pop();
-
-        //// m:sup
-
-        stack.push(Tag::MSup);
-        let state = end_element(
-            &mut buf_writer,
-            &stack,
-            &rels,
-            &mut math_mode,
-            &mut nary_has_chr,
-        );
-        assert!(state.is_ok());
-        assert_eq!(state.unwrap(), State::ClosedTag);
-
-        assert_eq!(drain(&mut buf_writer).unwrap(), "}");
-        stack.pop();
-
-        //// m:num
-
-        stack.push(Tag::MNum);
-        let state = end_element(
-            &mut buf_writer,
-            &stack,
-            &rels,
-            &mut math_mode,
-            &mut nary_has_chr,
-        );
-        assert!(state.is_ok());
-        assert_eq!(state.unwrap(), State::ClosedTag);
-
-        assert_eq!(drain(&mut buf_writer).unwrap(), "}");
-        stack.pop();
-
-        //// m:den
-
-        stack.push(Tag::MDen);
-        let state = end_element(
-            &mut buf_writer,
-            &stack,
-            &rels,
-            &mut math_mode,
-            &mut nary_has_chr,
-        );
-        assert!(state.is_ok());
-        assert_eq!(state.unwrap(), State::ClosedTag);
-
-        assert_eq!(drain(&mut buf_writer).unwrap(), "}");
-        stack.pop();
-
-        //// m:rad
-
-        stack.push(Tag::MRad);
-        let state = end_element(
-            &mut buf_writer,
-            &stack,
-            &rels,
-            &mut math_mode,
-            &mut nary_has_chr,
-        );
-        assert!(state.is_ok());
-        assert_eq!(state.unwrap(), State::ClosedTag);
-
-        assert_eq!(drain(&mut buf_writer).unwrap(), "}");
-        stack.pop();
-
-        //// w:bookmarkEnd
-
-        stack.push(Tag::WBookmarkEnd);
-        let state = end_element(
-            &mut buf_writer,
-            &stack,
-            &rels,
-            &mut math_mode,
-            &mut nary_has_chr,
-        );
-        assert!(state.is_ok());
-        assert_eq!(state.unwrap(), State::ClosedTag);
-
-        assert_eq!(drain(&mut buf_writer).unwrap(), "}");
-        stack.pop();
-
-        //// m:naryPr nary_has_chr = Some(false)
-
-        nary_has_chr = Some(false);
-        stack.push(Tag::MNaryPr);
-        let state = end_element(
-            &mut buf_writer,
-            &stack,
-            &rels,
-            &mut math_mode,
-            &mut nary_has_chr,
-        );
-        assert!(state.is_ok());
-        assert_eq!(state.unwrap(), State::ClosedTag);
-        assert!(nary_has_chr.is_none());
-
-        assert_eq!(drain(&mut buf_writer).unwrap(), "\\int");
-        stack.pop();
-
-        //// m:naryPr nary_has_chr = Some(true)
-
-        nary_has_chr = Some(true);
-        stack.push(Tag::MNaryPr);
-        let state = end_element(
-            &mut buf_writer,
-            &stack,
-            &rels,
-            &mut math_mode,
-            &mut nary_has_chr,
-        );
-        assert!(state.is_ok());
-        assert_eq!(state.unwrap(), State::ClosedTag);
-        assert!(nary_has_chr.is_none());
-
-        assert_eq!(drain(&mut buf_writer).unwrap(), "");
-        stack.pop();
-
-        //// m:naryPr nary_has_chr = None
-
-        nary_has_chr = None;
-        stack.push(Tag::MNaryPr);
-        let state = end_element(
-            &mut buf_writer,
-            &stack,
-            &rels,
-            &mut math_mode,
-            &mut nary_has_chr,
-        );
-        assert!(state.is_ok());
-        assert_eq!(state.unwrap(), State::ClosedTag);
-        assert!(nary_has_chr.is_none());
-
-        assert_eq!(drain(&mut buf_writer).unwrap(), "");
-        stack.pop();
+        assert!(matches!(state, Ok(State::ClosedTag)));
+        assert_eq!(drain(&mut buf_writer).unwrap(), latex);
     }
 
-    #[test]
-    fn xml_event_produces_correct_state() {
+    #[rstest]
+    #[case(
+        XmlEvent::StartElement {
+            name: owned_name("docx2latex", "test"),
+            attributes: vec![],
+            namespace: Namespace::empty(),
+        },
+        State::OpenedTag(Tag::Unknown {
+            id: "docx2latex:test".to_string()
+        })
+    )]
+    #[case(
+        XmlEvent::EndElement {
+            name: owned_name("docx2latex", "test"),
+        },
+        State::ClosedTag
+    )]
+    #[case(
+        XmlEvent::Characters("Characters".to_string()),
+        State::FoundContent("Characters".to_string())
+    )]
+    #[case(
+        XmlEvent::StartDocument {
+            version: xml::common::XmlVersion::Version10,
+            encoding: "ignored".to_string(),
+            standalone: None,
+        },
+        State::Happy
+    )]
+    #[case(XmlEvent::EndDocument, State::End)]
+    #[case(
+        XmlEvent::Whitespace(" ".to_string()),
+        State::FoundContent(" ".to_string())
+    )]
+    #[case(
+        XmlEvent::Comment("Ignored".to_string()),
+        State::Happy
+    )]
+    fn xml_event_produces_correct_state(#[case] event: XmlEvent, #[case] state: State) {
         let Fixture {
             mut buf_writer,
             rels,
@@ -934,16 +810,7 @@ Relationships>
             mut nary_has_chr,
         } = Fixture::default();
 
-        let namespace = xml::namespace::Namespace::empty();
-
-        //// StartElement
-
-        let event = xml::reader::XmlEvent::StartElement {
-            name: owned_name("docx2latex", "test"),
-            attributes: vec![],
-            namespace,
-        };
-        let state = xml_event(
+        let result = xml_event(
             &mut buf_writer,
             &stack,
             &rels,
@@ -951,105 +818,7 @@ Relationships>
             &mut math_mode,
             &mut nary_has_chr,
         );
-        assert!(state.is_ok());
-        assert_eq!(
-            state.unwrap(),
-            State::OpenedTag(Tag::Unknown {
-                id: "docx2latex:test".to_string()
-            })
-        );
-
-        //// EndElement
-
-        let event = xml::reader::XmlEvent::EndElement {
-            name: owned_name("docx2latex", "test"),
-        };
-        let state = xml_event(
-            &mut buf_writer,
-            &stack,
-            &rels,
-            &event,
-            &mut math_mode,
-            &mut nary_has_chr,
-        );
-        assert!(state.is_ok());
-        assert_eq!(state.unwrap(), State::ClosedTag);
-
-        //// Characters
-
-        let event = xml::reader::XmlEvent::Characters("Characters".to_string());
-        let state = xml_event(
-            &mut buf_writer,
-            &stack,
-            &rels,
-            &event,
-            &mut math_mode,
-            &mut nary_has_chr,
-        );
-        assert!(state.is_ok());
-        assert_eq!(
-            state.unwrap(),
-            State::FoundContent("Characters".to_string())
-        );
-
-        //// StartDocument
-
-        let event = xml::reader::XmlEvent::StartDocument {
-            version: xml::common::XmlVersion::Version10,
-            encoding: "ignored".to_string(),
-            standalone: None,
-        };
-        let state = xml_event(
-            &mut buf_writer,
-            &stack,
-            &rels,
-            &event,
-            &mut math_mode,
-            &mut nary_has_chr,
-        );
-        assert!(state.is_ok());
-        assert_eq!(state.unwrap(), State::Happy);
-
-        //// EndDocument
-
-        let event = xml::reader::XmlEvent::EndDocument;
-        let state = xml_event(
-            &mut buf_writer,
-            &stack,
-            &rels,
-            &event,
-            &mut math_mode,
-            &mut nary_has_chr,
-        );
-        assert!(state.is_ok());
-        assert_eq!(state.unwrap(), State::End);
-
-        //// Whitespace
-
-        let event = xml::reader::XmlEvent::Whitespace(" ".to_string());
-        let state = xml_event(
-            &mut buf_writer,
-            &stack,
-            &rels,
-            &event,
-            &mut math_mode,
-            &mut nary_has_chr,
-        );
-        assert!(state.is_ok());
-        assert_eq!(state.unwrap(), State::FoundContent(" ".to_string()));
-
-        //// other
-
-        let event = xml::reader::XmlEvent::Comment("Ignored".to_string());
-        let state = xml_event(
-            &mut buf_writer,
-            &stack,
-            &rels,
-            &event,
-            &mut math_mode,
-            &mut nary_has_chr,
-        );
-        assert!(state.is_ok());
-        assert_eq!(state.unwrap(), State::Happy);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), state);
     }
 }

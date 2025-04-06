@@ -42,7 +42,9 @@ pub fn math_text<P: Peek<Item = Tag>>(boo: &P) -> Option<&String> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::Boo;
+    use crate::{peekaboo::MockPeek, Boo};
+    use unimock::*;
+
     #[test]
     fn hyperlink_works() {
         let mut boo = Boo::default();
@@ -69,6 +71,21 @@ mod test {
 
         let (link, content) = hyperlink(&boo).unwrap();
         assert_eq!(link, &Link::Anchor("Anchor".to_string()));
+        assert_eq!(content, "Content");
+    }
+
+    #[test]
+    fn hyperlink_mock() {
+        let boo = Unimock::new((
+            MockPeek::reset.next_call(matching!()).returns(()),
+            MockPeek::peek.next_call(matching!()).returns(Some(Tag::Content("Content".to_string()))),
+            MockPeek::peek.next_call(matching!()).returns(Some(Tag::WText)),
+            MockPeek::peek.next_call(matching!()).returns(Some(Tag::WRun)),
+            MockPeek::peek.next_call(matching!()).returns(Some(Tag::WHyperlink(Link::Anchor("Any".to_string())))),
+        ));
+
+        let (link, content) = hyperlink(&boo).unwrap();
+        assert_eq!(link, &Link::Anchor("Any".to_string()));
         assert_eq!(content, "Content");
     }
 
